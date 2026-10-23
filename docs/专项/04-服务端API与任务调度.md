@@ -1,10 +1,10 @@
 # S04 服务端 API 与任务调度
 
-更新日期：2026-10-23  
-文档版本：v0.4，图文契约草案，补充服务端语言候选修订；保留停止语义与持久调度  
-验证状态：已阅读关联专项、核对官方资料和部分开源源码；没有业务服务、数据库或取消实验
+更新日期：2026-10-23
+文档版本：v0.5，A-1／A-2 本机最小交付；保留目标设计与未验证边界
+验证状态：Fake＋真实 API／SQLite／C# 本机闭环已测试；完整 G2、真实模型、公网与宿主未验收
 
-本轮主会话根据 S01～S05 收敛结果同步修订本文件；整体依赖与目录见 [实施规划](../实施规划.md)，验收门槛见 [S06](06-联调与验收.md)。以下新增字段和工程默认仍待 P0 落实为 schema／样例，不代表协议已发布或模型预算已验证。
+本轮主会话根据 S01～S05 收敛结果同步修订本文件；整体依赖与目录见 [实施规划](../实施规划.md)，验收门槛见 [S06](06-联调与验收.md)。机器契约已落 contracts/api/v1 和 contracts/examples；实际范围见第 1.3 节，不代表公网发布或真实模型预算已验证。
 
 双线执行：本专项业务部分由 [A 线](../实现线A-客户端服务端与公网.md) 实现；本文件涉及的真实生成、PromptBuilder 和联合预算由 [B 线](../实现线B-模型能力与推理.md) 实现在同一服务项目内。A 维护公共抽象与项目装配，B 交付真实实现；不增加第二套模型业务服务。
 
@@ -14,7 +14,7 @@
 
 **服务端语言待定，当前优先建议 Python＋FastAPI，C#／ASP.NET Core Minimal API 保留为备选。** 之前默认 C# 是工程建议，不能从客户端 C# 推导出服务端必须 C#。比较、状态及目录统一见 [实施规划第 0.5／5 节](../实施规划.md#05-服务端语言与推理引擎分别选择)。.NET Framework 4.7.2 客户端只交换 HTTP／JSON，不必与服务端使用相同语言或运行时。
 
-本文件给出明确工程默认值，供评审及后续实现，减少实现者临时决策。**工程默认不等于用户逐项确认，也不等于已实测。** 当前是方案阶段，下列路径、配置、算法和 HTTP 示例均为拟实现契约。
+本文件给出明确工程默认值，供评审及后续实现，减少实现者临时决策。**工程默认不等于用户逐项确认，也不等于已实测。** 本轮按优先建议使用 Python＋FastAPI 落地 Fake 原型；下文保留目标设计，未列入第 1.3 节证据的条目不能当作已实现。
 
 ### 1.1 已确认与本轮建议
 
@@ -38,6 +38,24 @@
 
 每个任务只做一次模型调用，返回待人工检查的文本。澄清、修改和编译反馈都可作为新任务提交。服务端不运行生成的 C#，不连接相机／串口，不自动修改流程，不承诺自动编译修复。S01／S05 后续完善内容规则和宿主接入时，复用同一任务协议。
 
+### 1.3 A-1／A-2 实际交付（2026-10-23）
+
+A 工作目录 D:\github\AiServer-A／line-a，B 保持 D:\github\AiServer／line-b。公共契约独立提交 272b22b。运行／配置／管理见 [server README](../../server/README.md)，A 编号覆盖与限制见 [阶段报告](../验证记录/G0-G2-A-Fake-20261023.md)。
+
+| 范围 | 本轮实际情况 |
+| --- | --- |
+| 外部契约 | JSON Schema＋文本／PNG／就绪／状态／结果／错误样例，运行时从唯一契约校验 |
+| API／存储 | FastAPI、SQLite WAL/FULL、线程中的短事务／独立连接、单实例锁、单消费循环，先入库再 202 |
+| 认证与任务 | token 仅存 SHA256；归属、幂等、容量、查回／列表、停止／超时、终态保护与重启恢复标记 |
+| 图片 | Pillow 11.0.0 verify＋load，不缩放，真实字节 hash／接收发送记录／正文清理；合成图不证明看图 |
+| Fake | 延迟、取消／晚到、空／截断／协议／连接失败；ready／结果明确 Fake，token 计数为空；Production 禁止启用 |
+| 内部接口 | inference/contracts.py 的 TaskInput／Profile／PreparedInput／Budget／Provider；原样执行准备快照；ready 取预算能力与 profile 交集 |
+| 管理 | user-add、token-create／revoke、user-disable、离线 recovery-confirm；未交付 backup |
+| 实测 | 20 个集成测试；C# net8.0 真回环 HTTP 的文本／PNG、查回／停止、恢复状态读旧结果；4 次 Fake 最大活动数 1 |
+| 未完成 | 完整 G2 竞争／故障／备份／清理边界、日志轮转／限流、长期托管；真实 VL／预算／取消、公网与宿主 |
+
+上述采用是工程默认，不改写 D10 的用户确认状态。依赖原环境已存在，没有安装／升级；版本和来源见 [第三方引用](../第三方引用.md)。
+
 ## 2. 最小架构、依赖和代码组织
 
 ```mermaid
@@ -56,7 +74,7 @@ flowchart LR
 
 | 项目 | 首版取舍 | 作用 |
 | --- | --- | --- |
-| Python＋FastAPI／Uvicorn／Pydantic | 当前优先候选，未安装或锁版本 | HTTP、JSON 校验、路由、配置与生命周期；实际版本需适配指定解释器 |
+| Python＋FastAPI／Uvicorn／Pydantic | Fake 原型已采用；原环境版本与锁见第 1.3 节 | HTTP、JSON 校验、路由、配置与生命周期；实际版本需适配指定解释器 |
 | SQLite 驱动 | 先评估标准库 sqlite3；如需异步封装再引入相应包 | 参数化 SQL、事务、备份；避免阻塞事件循环，连接与线程归属明确 |
 | 异步 HTTP 客户端 | HTTPX AsyncClient 或官方 Ollama AsyncClient 选其一 | 复用连接、图文请求、截止时间、取消与错误映射；统一归入适配层 |
 | 图片校验／解码组件 | 图文实现时评估并登记适用于 Windows 的现成组件 | 有界校验真实 PNG；不因旧版“唯一额外包”限制而手写完整图片解码器 |
@@ -70,7 +88,7 @@ C# 备选仍可用 ASP.NET Core Minimal API＋BackgroundService＋Microsoft.Data
 
 ### 2.2 拟建代码结构
 
-拟建目录只维护在 [实施规划第 5 节](../实施规划.md#5-统一项目与目录规划)，当前按 Python 候选展示 server 包、C# Demo、业务契约与评测目录，尚未创建。A 维护服务装配／api／jobs／storage／operations、Fake、依赖和公共抽象；B 维护 context 与真实 Ollama 适配及对应测试。
+拟建目录只维护在 [实施规划第 5 节](../实施规划.md#5-统一项目与目录规划)，本轮已创建 server A 模块、C# Demo 与契约；实际路径见 server README，其余仍为目标规划。A 维护服务装配／api／jobs／storage／operations、Fake、依赖和公共抽象；B 维护 context 与真实 Ollama 适配及对应测试。
 
 先用一个业务服务包和对应测试，只在模型、预算和存储边界建立小接口，便于模拟故障和替换。不以承诺总代码行数来省略并发与恢复逻辑。不要求先建服务 csproj，也不为 A／B 分别建立业务服务器。
 
@@ -350,9 +368,9 @@ waitingAhead 为较早 sequence 且仍 queued 的任务数；activeAhead 是占�
 
 客户端有非终态任务才每约 3 秒轮询并加随机抖动，终态后取结果一次并停止。查询／健康等短 HTTP 超时 15 秒；含图提交单独建议 120 秒，服务端仍在接收、校验并持久化后立即返回任务标识，不等待模型生成。复用 HttpClient／连接；失败按 3／6／12／30 秒退避，遵从 Retry-After。上传截止时间、排队等待、推理执行是三种计时；代理接收限制必须一起测试，不能只改客户端超时。
 
-### 5.6 图片协议与生命周期（新增草案）
+### 5.6 图片协议与生命周期（最小传输已实现）
 
-首版直接在 JSON 中携带 `images`，不新增上传服务或对象存储。每项候选字段为 `imageId`、`mediaType`、`dataBase64`、`capturedAt`、`snapshotRevision`；P0 将类型、可空规则和样例落实为唯一 schema。source 的工程／脚本关联沿用 context；快照未知可如实留空，不能伪造当前来源。
+首版直接在 JSON 中携带 `images`，不新增上传服务或对象存储。每项候选字段为 `imageId`、`mediaType`、`dataBase64`、`capturedAt`、`snapshotRevision`；类型、可空规则和样例已落实为唯一 schema；真实预算与模型映射待联合验证。source 的工程／脚本关联沿用 context；快照未知可如实留空，不能伪造当前来源。
 
 - `mediaType` 首版仅 `image/png`；`dataBase64` 是实际图片原始字节的编码，不是 data URI、路径或 URL。服务端自行验证真实格式，不信任后缀或客户端声明。
 - 初始限制读取 S02 ImagePolicy：数量、单图字节、长边、总像素共同有效；先限制正文和编码大小，再做有界格式／尺寸检查和解码，拒绝损坏图片。文本合计和总 JSON 限制分别执行。
@@ -493,7 +511,7 @@ request_json 保存规范业务快照；effective_settings_json 保存模型 dig
 
 ### 8.4 备份与故障
 
-本机 backup 管理命令用 SqliteConnection.BackupDatabase，之后 quick_check 并记录 schema 版本。首版运维约定先停止 API 再备份，简化写入协调；不得运行中只复制主 db 就视为完整备份。[官方备份 API](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/backup)
+本轮尚未交付 backup。Python 目标实现采用 sqlite3.Connection.backup，之后 quick_check 并记录 schema 版本。首版运维约定先停止 API 再备份，简化写入协调；不得运行中只复制主 db 就视为完整备份。[官方备份 API](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/backup)
 
 磁盘不足、写入失败或损坏时拒绝新任务、暂停调度，不创建空库覆盖，不无备份破坏性修复。已算完而未持久化的结果不能报告成功。恢复旧备份可能丢失最近任务与幂等记录，需说明丢失窗口；恢复后非终态按重启规则失败，恢复要求不得绕过。
 
@@ -503,31 +521,7 @@ request_json 保存规范业务快照；effective_settings_json 保存模型 dig
 
 S02 的 `config/inference.development.json` 是引擎与推理参数唯一来源，API 读取它，不在 server.json 再复制 NumCtx／NumPredict。生产使用对应 inference 配置，业务服务和 S02 启动脚本指向同一文件。
 
-业务配置示例，均为拟建路径：
-
-```json
-{
-  "Server": {
-    "ListenUrl": "http://127.0.0.1:18080",
-    "DataDirectory": "D:\\github\\AiServer\\.local\\server",
-    "InferenceConfigPath": "D:\\github\\AiServer\\config\\inference.development.json",
-    "InferenceProvider": "Ollama",
-    "PromptPath": "D:\\github\\AiServer\\config\\prompts\\s01-bootstrap-vl-v1.txt",
-    "MaxRequestBytes": 5242880,
-    "MaxTextBytes": 131072,
-    "ShutdownTimeoutSeconds": 45
-  },
-  "Jobs": {
-    "MaxOutstandingGlobal": 10,
-    "MaxOutstandingPerUser": 2,
-    "QueueTimeoutSeconds": 1800,
-    "PollSeconds": 3,
-    "ControlCheckSeconds": 1
-  },
-  "Retention": { "PayloadDays": 7, "TombstoneDays": 30, "CleanupMinutes": 60 },
-  "LoggingPolicy": { "Days": 14, "MaxFileMiB": 20, "TotalMiB": 200 }
-}
-```
+本轮唯一实际模板为 [config/server.example.json](../../config/server.example.json)，使用 snake_case 字段；Settings 校验及 AISERVER_ 覆盖见 server README。当前仅允许 Development/Fake；A-4 接入时才装配 B 的实际 profile，不把模型参数复制进业务配置。
 
 加载顺序为模板默认→明确指定本地配置→AISERVER_ 前缀环境变量。启动校验绝对路径、限额关系、正数、输入＋输出＋预留预算、模型锁和模板预算器、回环监听与允许 Host。错误则不接任务，不静默退回未知默认值。
 
@@ -576,9 +570,9 @@ API 崩溃可能留下仍计算的 Ollama。把旧任务改失败与允许新推
 
 ### 10.3 长期托管
 
-前台验收后发布 win-x64 文件夹形式的 Windows Service，建议服务名 AiServer-Api；加入 WindowsServices 支持，使用绝对配置／数据路径，不依赖当前目录。初次不追求单文件裁剪，避免 SQLite 原生库发布问题。采用受限运行账户、明确权限，通过 SCM 停机。[Windows Service 官方说明](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/windows-service?view=aspnetcore-10.0)
+本轮为 Python 前台原型，没有服务注册或无人登录测试。后续验证 Python 进程包装／任务计划、受限账户、绝对路径、停机预算和有限重启；不套用旧 .NET WindowsServices 发布步骤。
 
-Ollama 仍用 S02 唯一任务计划入口，NATAPP 用 S03 服务；API 不接管其安装／重启。API 可延迟启动并有限重启，反复失败留本机日志；重启进程不自动清 recovering。无人登录开机、服务账户权限与三者组合恢复必须实测。
+Ollama／NATAPP 各用 S02／S03 唯一入口，API 不接管其安装或重启。组合托管恢复仍待 A-3／G6 实测。
 
 ## 11. 其他专项的稳定边界
 
@@ -604,13 +598,13 @@ Ollama 仍用 S02 唯一任务计划入口，NATAPP 用 S03 服务；API 不接�
 
 FakeClient 至少支持：延迟成功、感知取消、忽略取消并晚到成功、超时、空文本、截断、协议错误和连接失败。只在 Development／测试启用；ready 显示 Fake，正式配置禁止误启。测试不运行模型返回代码。
 
-实施前合并 `.gitignore`，排除 .local、数据库／WAL、日志和原始 token。锁定 SDK／NuGet，生成配置模板、管理命令帮助和运维说明。不因工作目录存在就假定有 Git；本轮检查工作区尚未初始化为 Git 仓库，没有提交、安装或部署。
+实施前合并 `.gitignore`，排除 .local、数据库／WAL、日志和原始 token。锁定 SDK／NuGet，生成配置模板、管理命令帮助和运维说明。本轮按用户要求建立共享历史和 A／B 独立工作目录，有提交及本机验证，没有公网或系统服务部署。
 
 ## 13. 验收用例与证据要求
 
-以下全部**未执行**。实现时建 S04 验证报告，含实际输入、版本、配置、预期、结果、时间与日志证据。关键竞争测试用可控 Fake 屏障确定顺序，不能只靠手动同时点按钮。
+下表是目标矩阵，已执行子集见第 1.3 节及阶段报告，无证据的项目仍未执行；本轮不把完整 G2 标为通过。关键竞争测试用可控 Fake 屏障确定顺序，不能只靠手动同时点按钮。
 
-v0.2／v0.3 的既有静态检查不代表下表用例已执行。v0.4 已在文档中对齐 VL 模型、图片及上传限制，旧文本预算算法退役；机器可读 schema、图文预算器与真实引擎仍未实现或验证。
+v0.2／v0.3 的既有静态检查不代表下表用例已执行。v0.4 已在文档中对齐 VL 模型、图片及上传限制，旧文本预算算法退役；机器 schema 已交付；真实图文预算与引擎仍未在本线接通／验证。
 
 | 编号 | 操作 | 必须满足 |
 | --- | --- | --- |
@@ -678,15 +672,14 @@ A01～A13、A15～A19、A25～A26、A28 可大量使用 Fake／临时数据库�
 | 实际模板与版本 | S02 引擎、digest、VL 模板、联合预算校验；实际语言运行时／依赖与 SDK 锁定 | 普通真实业务请求前完成；受控小图校准可先独立进行 |
 | 实际公网域名 | 使用 S03 已选路线，执行时填值并更新 Host | 不阻塞本机 API，阻塞外网验收 |
 
-本轮没有购买、安装、服务注册、凭据创建、模型下载或部署；不重复询问已确认入口／实施顺序，不把新方案冒充逐项定案。
+本轮创建本机临时测试用户／令牌并验证 Fake；未购买、安装包、注册服务、下载模型或公网部署；不重复询问已确认入口／实施顺序，不把新方案冒充逐项定案。
 
 ## 16. 回传主会话摘要
 
-- 语言候选修订：主会话按用户提出的 Python／C++ 比较，优先建议 Python＋FastAPI；C# 保留为备选，未记为用户确认。已修订第 1～3 节和取消术语，业务 API、持久任务与验收语义不变；没有安装或实现。总体状态见主方案 D10。
-- 本次结论：v0.4 保留小型服务和 v0.3 的对话停止语义；对齐 Qwen3-VL，未发布 v1 草案直接增加可选图片、5MiB 正文、图片幂等／保存及单独提交超时，旧文本预算器退出主线。
-- 决策状态与用户确认依据：用户于 2026-10-23 明确要求取消、完成、超时按主流 Agent 对话处理，记为产品方向已确认。状态与原子更新是本项目实现映射，非跨 SDK 统一标准；其他技术细节、限额与保存周期仍为工程默认。
-- 已核实的资料／已执行的测试：保留前轮资料依据，本轮另核对 Vercel AI SDK stop／abort／部分结果与 Claude Agent SDK interrupt／旧轮消息处理，仅借鉴行为。只做文档静态检查，无应用和模型实测。
-- 尚未验证和待决策事项：P0 的 schema／类型细节、实际 PNG 解码组件、VL 联合预算、4K／1024 完整脚本容量、含图取消和公网上传；工程默认未逐项变为用户确认。
-- 对其他专项的影响：S02／S06 共验真实图文、预算和 T08／T09；S05 Demo 先短文本、再显式带图；S03 测 5MiB 正文和 120 秒提交默认；正常停止自动收尾、异常才人工。
-- 建议主方案更新项（关联 D 编号）：主会话本轮统一汇总 D05、D08，实施顺序和目录以实施规划为准；下次专项按实际实现证据回传。
-- 下一步：P0 落实契约和样例，P1B 先 API＋Fake＋Demo；P1A 独立模型预检；预算与真实视觉链路在 P3 联合验收。
+- 结论：A-1 唯一契约和 A-2 最小 Fake 闭环已交付；完整 G2 尚未整体通过。
+- 状态：原型采用优先建议 Python＋FastAPI，C# Demo net8.0 为工程默认，不登记为最终用户选型。
+- 实测：20 个测试通过；C# 0 警告／错误；真回环 HTTP smoke 4 次 Fake、最大活动数 1；证据见第 1.3 节。
+- 未验证：真实 VL、联合预算、GPU 停止、NATAPP、长期托管、宿主。B 进度不由本报告推断。
+- 接口：独立提交 272b22b，B 可保留实验类并增加包装；ready 能力与拒绝一致。S03 以认证 Fake 为基础，先补持续内测保护。
+- 主会话待汇总：D05／D08 实施证据、D09 双目录、D10 工程采用状态；未直接修改主方案／总进度。
+- 下一步：A-3 补完整可靠性和运维，再验公网；B 最小包装可用时先本机兼容 smoke，后联合 G4。
