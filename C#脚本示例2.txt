@@ -1,0 +1,90 @@
+using System;
+using System.Diagnostics;
+using System.IO.Ports;
+using System.Windows.Forms;
+using IMV.CoreBase;
+using IMV.Algorithms;
+using IMV.CoreBase.BaseData;
+
+namespace NamespaceCsharpScriptEngine
+{
+    public class CsharpScriptClass
+    {
+        // 沿用字段间隔扩展为依次读取[4]、[6]、[8]、[10]；各路有效信号须属于当前产品周期
+        // xunhuan：沿用外部流程控制，本脚本不修改。
+        // photoCount：本产品已接受的拍照请求数，初始0。
+        // trigger：本次监听输出，0无触发，1/2/3/4选择相应拍照分支。
+        // 注意trigger已改为分支编号，不再是旧版本的上升沿允许标志。
+        // 四个拍照分支及其执行条件分别使用trigger==1/2/3/4。
+        // index：仅诊断，1执行中，9完成，-1错误。
+        // 前三次采图成功后各发一次完成通知；第四次计算完成后发第四次通知。
+        // 第四次通知成功后，由外部将photoCount和trigger设为0。
+        // 各节点串行执行，当前拍照和通知完成前不要再次执行监听。
+        public static void Execute(Guid processkey)
+        {
+            var Script = new Script_Function(processkey);
+            Script.SetGlobalVarValue("trigger", 0.0);
+            Script.SetGlobalVarValue("index", 1.0);
+
+            try
+            {
+                double count = (double)Script.GetGlobalVarValue("photoCount");
+                if (count != 0.0 && count != 1.0 && count != 2.0 &&
+                    count != 3.0 && count != 4.0)
+                    throw new Exception("photoCount应为0、1、2、3或4。");
+
+                // 本轮四次请求已接受完，等待外部完成通知并复位计数。
+                if (count == 4.0)
+                {
+                    Script.SetGlobalVarValue("index", 9.0);
+                    return;
+                }
+
+                // photoCount=0/1/2/3，分别读取[4]/[6]/[8]/[10]。
+                int signalIndex = 4 + (int)count * 2;
+                byte[] received = new byte[13];
+                using (var sp = new SerialPort("COM7", 38400, Parity.None, 8, StopBits.One))
+                {
+                    sp.ReadTimeout = 8000;
+                    sp.WriteTimeout = 8000;
+                    sp.Open();
+
+                    byte[] data = { 0x01, 0x04, 0x00, 0x00, 0x00, 0x04, 0xF1, 0xC9 };
+                    sp.Write(data, 0, data.Length);
+
+                    int offset = 0;
+                    Stopwatch timer = Stopwatch.StartNew();
+                    while (offset < received.Length)
+                    {
+                        int remaining = 8000 - (int)timer.ElapsedMilliseconds;
+                        if (remaining <= 0)
+                            throw new TimeoutException("串口接收超时。");
+
+                        sp.ReadTimeout = remaining;
+                        int n = sp.Read(received, offset, received.Length - offset);
+                        if (n <= 0)
+                            throw new Exception("未收到有效串口数据。");
+                        offset += n;
+                    }
+                }
+
+                if (received[0] != 0x01 || received[1] != 0x04 || received[2] != 8)
+                    throw new Exception("串口回复格式错误。");
+
+                if (received[signalIndex] == 1)
+                {
+                    count += 1.0;
+                    Script.SetGlobalVarValue("photoCount", count);
+                    Script.SetGlobalVarValue("trigger", count);
+                }
+
+                Script.SetGlobalVarValue("index", 9.0);
+            }
+            catch (Exception ex)
+            {
+                Script.SetGlobalVarValue("index", -1.0);
+                MessageBox.Show("监听失败：" + ex.Message);
+            }
+        }
+    }
+}
