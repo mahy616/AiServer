@@ -1,0 +1,30 @@
+{
+  "jobId": "196867e2-2b19-4a06-9fcf-8f34427840a1",
+  "status": "succeeded",
+  "output": {
+    "text": "// FAKE: transport fixture only; no model or compiler was run.",
+    "isComplete": true,
+    "kind": "unclassified"
+  },
+  "validation": {
+    "metadata": "not_run",
+    "compilation": "not_run",
+    "business": "not_run"
+  },
+  "source": {
+    "projectId": "demo-project",
+    "scriptId": "demo-script",
+    "snapshotRevision": "local-17",
+    "currentCodeSha256": null
+  },
+  "generation": {
+    "profileId": "fake-v1",
+    "promptVersion": "fake-no-model-v1",
+    "inferenceProvider": "Fake",
+    "inputTokens": null,
+    "outputTokens": null,
+    "finishReason": "stop"
+  },
+  "error": null,
+  "payloadExpiresAt": "2026-10-30T10:20:13Z"
+}

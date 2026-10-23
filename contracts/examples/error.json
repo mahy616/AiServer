@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "INPUT_BUDGET_UNVERIFIED",
+    "message": "Input budget unverified",
+    "retryable": false,
+    "details": {}
+  },
+  "traceId": "example-trace-id"
+}

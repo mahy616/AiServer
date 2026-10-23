@@ -1,0 +1,13 @@
+{
+  "canAcceptJobs": true,
+  "schedulerState": "available",
+  "reasonCode": null,
+  "observedAt": "2026-10-23T10:20:12Z",
+  "recommendedPollSeconds": 3,
+  "inferenceProvider": "Fake",
+  "acceptedInputTypes": [
+    "text",
+    "image"
+  ],
+  "storage": "ok"
+}

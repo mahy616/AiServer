@@ -1,0 +1,20 @@
+{
+  "clientRequestId": "416417b5-e936-4cde-b0df-969281936318",
+  "operation": "create",
+  "instruction": "写一个标准库 C# 方法，计算 double 数组平均值；空数组时抛出 ArgumentException。",
+  "currentCode": null,
+  "context": {
+    "schemaVersion": 1,
+    "projectId": "demo-project",
+    "scriptId": "demo-script",
+    "snapshotRevision": "local-17",
+    "targetFramework": ".NETFramework,Version=v4.7.2",
+    "csharpLanguageVersion": null,
+    "sdkContractVersion": null,
+    "sdkReferenceText": "仅用于 Fake 传输验证，不调用宿主 SDK。",
+    "flowContextText": "无设备访问。"
+  },
+  "history": [],
+  "images": [],
+  "parentJobId": null
+}
