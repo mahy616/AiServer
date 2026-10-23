@@ -8,9 +8,6 @@ import json
 
 from PIL import Image
 
-PROMPT_VERSION = "s01-bootstrap-vl-v1"
-
-
 @dataclass(frozen=True)
 class PreparedPrompt:
     messages_json: str
@@ -48,13 +45,15 @@ def prepare_prompt(request: dict, system_path: Path, image_bytes: tuple[bytes, .
         images.append(base64.b64encode(raw).decode("ascii"))
         hashes.append(hashlib.sha256(raw).hexdigest())
     # History remains untrusted material inside user content, never system roles.
-    material = {key: request.get(key) for key in
-                ("operation", "instruction", "currentCode", "context", "history")}
+    order = (("context", "currentCode", "history", "operation", "instruction")
+             if system_path.stem == "s01-bootstrap-vl-v2" else
+             ("operation", "instruction", "currentCode", "context", "history"))
+    material = {key: request.get(key) for key in order}
     user = {"role": "user", "content": json.dumps(material, ensure_ascii=False, separators=(",", ":"))}
     if images:
         user["images"] = images
     messages = [{"role": "system", "content": system_path.read_text(encoding="utf-8-sig")}, user]
     serialized = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
     return PreparedPrompt(serialized, hashlib.sha256(serialized.encode()).hexdigest(),
-                          PROMPT_VERSION, tuple(hashes),
+                          system_path.stem, tuple(hashes),
                           sum(len(item["content"].encode("utf-8")) for item in messages))

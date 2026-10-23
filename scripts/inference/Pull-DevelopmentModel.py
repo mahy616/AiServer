@@ -41,10 +41,17 @@ identity = {"engine_version": version["version"], "model": model,
             "template_sha256": hashlib.sha256(show.get("template", "").encode()).hexdigest(),
             "capabilities": show["capabilities"], "image_policy": cfg["ImagePolicy"]}
 path = ROOT / cfg["ModelLockPath"]
-if path.exists() and json.loads(path.read_text(encoding="utf-8")) != identity:
-    raise RuntimeError("Existing model lock differs; inspect before replacing")
 path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(json.dumps(identity, ensure_ascii=False, indent=2), encoding="utf-8")
+if path.exists():
+    previous = json.loads(path.read_text(encoding="utf-8"))
+    current = json.loads(json.dumps(identity))
+    # File timestamps can change on an identical pull; they are not model identity.
+    for record in (previous, current):
+        record["model"].pop("modified_at", None)
+    if previous != current:
+        raise RuntimeError("Existing model lock differs; inspect before replacing")
+else:
+    path.write_text(json.dumps(identity, ensure_ascii=False, indent=2), encoding="utf-8")
 evidence = ROOT / ".local/reports/model-provisioning"
 evidence.mkdir(parents=True, exist_ok=True)
 (evidence / "show.json").write_text(json.dumps(show, ensure_ascii=False, indent=2), encoding="utf-8")
