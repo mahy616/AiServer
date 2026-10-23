@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "error": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "details"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    },
+    "errorResponse": {
+      "type": "object",
+      "required": [
+        "error",
+        "traceId"
+      ],
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/error"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      }
+    },
+    "submission": {
+      "type": "object",
+      "required": [
+        "jobId",
+        "clientRequestId",
+        "status",
+        "replayed",
+        "pollAfterSeconds"
+      ],
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "clientRequestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "cancelling",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "pollAfterSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "ready": {
+      "type": "object",
+      "required": [
+        "canAcceptJobs",
+        "schedulerState",
+        "inferenceProvider",
+        "acceptedInputTypes",
+        "reasonCode",
+        "observedAt",
+        "recommendedPollSeconds"
+      ],
+      "properties": {
+        "canAcceptJobs": {
+          "type": "boolean"
+        },
+        "schedulerState": {
+          "enum": [
+            "starting",
+            "available",
+            "busy",
+            "draining",
+            "recovering",
+            "paused",
+            "stopping"
+          ]
+        },
+        "inferenceProvider": {
+          "type": "string"
+        },
+        "acceptedInputTypes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "text",
+              "image"
+            ]
+          }
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recommendedPollSeconds": {
+          "type": "integer"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "jobId",
+        "clientRequestId",
+        "status",
+        "queue",
+        "timing",
+        "schedulerState",
+        "resultAvailable",
+        "error",
+        "createdAt",
+        "startedAt",
+        "finishedAt",
+        "payloadExpiresAt",
+        "pollAfterSeconds"
+      ],
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "clientRequestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "cancelling",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "queue": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "timing": {
+          "type": "object"
+        },
+        "resultAvailable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "jobId",
+        "status",
+        "output",
+        "validation",
+        "source",
+        "generation",
+        "error",
+        "payloadExpiresAt"
+      ],
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "cancelling",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "validation": {
+          "const": {
+            "metadata": "not_run",
+            "compilation": "not_run",
+            "business": "not_run"
+          }
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "text",
+                "isComplete",
+                "kind"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "isComplete": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "const": "unclassified"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cancel": {
+      "type": "object",
+      "required": [
+        "jobId",
+        "status",
+        "cancelAccepted",
+        "inferenceStopConfirmed",
+        "schedulerState"
+      ],
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "cancelling",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "cancelAccepted": {
+          "type": "boolean"
+        },
+        "inferenceStopConfirmed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "list": {
+      "type": "object",
+      "required": [
+        "items",
+        "nextBeforeSequence"
+      ],
+      "properties": {
+        "items": {
+          "type": "array"
+        },
+        "nextBeforeSequence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

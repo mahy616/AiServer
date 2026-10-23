@@ -1,0 +1,23 @@
+{
+  "jobId": "196867e2-2b19-4a06-9fcf-8f34427840a1",
+  "clientRequestId": "416417b5-e936-4cde-b0df-969281936318",
+  "status": "queued",
+  "createdAt": "2026-10-23T10:20:12Z",
+  "startedAt": null,
+  "finishedAt": null,
+  "queue": {
+    "waitingAhead": 0,
+    "activeAhead": 1,
+    "position": 1,
+    "isPaused": false
+  },
+  "timing": {
+    "queueMs": 100,
+    "executionMs": null
+  },
+  "schedulerState": "busy",
+  "pollAfterSeconds": 3,
+  "resultAvailable": false,
+  "payloadExpiresAt": null,
+  "error": null
+}
