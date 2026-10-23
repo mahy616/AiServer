@@ -17,3 +17,5 @@ config/inference.development.json
 config/inference.production.json
 *.token
 *.secret
+config/*.local.json
+*.local.ini

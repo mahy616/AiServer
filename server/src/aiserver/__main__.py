@@ -4,7 +4,7 @@ import sqlite3
 import sys
 
 from aiserver.operations.lock import InstanceLock
-from aiserver.settings import Settings
+from aiserver.settings import ROOT, Settings
 from aiserver.storage.db import Store
 
 def main():
@@ -17,10 +17,16 @@ def main():
     p = sub.add_parser("token-revoke"); p.add_argument("key_id")
     p = sub.add_parser("user-disable"); p.add_argument("user_id")
     p = sub.add_parser("recovery-confirm"); p.add_argument("--note",required=True)
+    p = sub.add_parser("backup"); p.add_argument("destination", type=Path)
+    p = sub.add_parser("restore"); p.add_argument("source", type=Path)
+    sub.add_parser("cleanup")
     args = parser.parse_args()
     if args.config and not Path(args.config).is_absolute():
         parser.error("--config must be absolute")
-    settings = Settings.load(args.config)
+    default_config = ROOT / "config/server.local.json"
+    if not default_config.exists():
+        default_config = ROOT / "config/server.ollama.example.json"
+    settings = Settings.load(args.config or str(default_config))
     if args.command == "serve":
         import uvicorn
         from aiserver.app import create_app
@@ -30,8 +36,11 @@ def main():
     store = Store(settings)
     lock = None
     try:
-        if args.command == "recovery-confirm":
+        if args.command in ("recovery-confirm", "backup", "restore", "cleanup"):
             lock = InstanceLock(settings.data_directory).acquire()
+        if args.command == "restore":
+            store.restore(args.source)
+            return
         store.initialize()
         if args.command == "user-add":
             store.user_add(args.user_id,args.name)
@@ -44,6 +53,10 @@ def main():
             store.user_disable(args.user_id)
         elif args.command == "recovery-confirm":
             store.confirm_recovery(args.note)
+        elif args.command == "backup":
+            store.backup(args.destination)
+        elif args.command == "cleanup":
+            store.cleanup()
     finally:
         if lock:
             lock.release()

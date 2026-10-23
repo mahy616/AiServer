@@ -32,6 +32,8 @@ def assert_schema(name, value):
 
 @contextmanager
 def service(tmp_path, *, provider=None, profile=None, budget=None, **overrides):
+    overrides.setdefault("requests_per_minute", 10000)
+    overrides.setdefault("submissions_per_minute", 120)
     settings = Settings(data_directory=tmp_path, **overrides)
     app = create_app(settings,provider=provider,profile=profile,budget=budget)
     app.state.store.initialize()

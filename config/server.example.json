@@ -1,8 +1,8 @@
 {
   "environment": "Development",
   "provider": "Fake",
-  "data_directory": "D:\\github\\AiServer-A\\.local\\server",
-  "contract_directory": "D:\\github\\AiServer-A\\contracts\\api\\v1",
+  "data_directory": ".local/server-fake",
+  "contract_directory": "contracts/api/v1",
   "allowed_hosts": [
     "127.0.0.1",
     "localhost"

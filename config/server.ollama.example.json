@@ -1,0 +1,21 @@
+{
+  "environment": "Production",
+  "provider": "Ollama",
+  "data_directory": ".local/server",
+  "contract_directory": "contracts/api/v1",
+  "inference_config": "config/inference.development.example.json",
+  "system_prompt": "config/prompts/script-assistant-v1.txt",
+  "manage_engine": true,
+  "allowed_hosts": [
+    "127.0.0.1",
+    "localhost",
+    "szzj.nat200.top"
+  ],
+  "port": 18080,
+  "max_outstanding_global": 10,
+  "max_outstanding_per_user": 2,
+  "execution_timeout_seconds": 600,
+  "cleanup_timeout_seconds": 30,
+  "requests_per_minute": 120,
+  "submissions_per_minute": 6
+}

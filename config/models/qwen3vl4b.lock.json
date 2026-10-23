@@ -1,0 +1,45 @@
+{
+  "engine_version": "0.40.9",
+  "model": {
+    "name": "qwen3-vl:4b-instruct-q4_K_M",
+    "model": "qwen3-vl:4b-instruct-q4_K_M",
+    "modified_at": "2026-10-23T18:22:38.5260764+08:00",
+    "size": 3337225651,
+    "digest": "84f7ed8042fa7cdbd902f7dcb7d0370e032095047cc3244179f263b77b5bc318",
+    "details": {
+      "parent_model": "dhiltgen/qwen3-vl:4b-instruct-q4_K_M-llamacpp",
+      "format": "gguf",
+      "family": "qwen3vl",
+      "families": [
+        "qwen3vl",
+        "clip"
+      ],
+      "parameter_size": "4.0B",
+      "quantization_level": "Q4_K_M",
+      "context_length": 262144,
+      "embedding_length": 2560,
+      "runner": "llamacpp"
+    },
+    "capabilities": [
+      "completion",
+      "vision",
+      "tools"
+    ]
+  },
+  "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+  "capabilities": [
+    "completion",
+    "vision",
+    "tools"
+  ],
+  "image_policy": {
+    "MaxImages": 1,
+    "MaxBytesPerImage": 3145728,
+    "MaxLongEdge": 1280,
+    "MaxPixelsPerImage": 786432,
+    "AllowedFormats": [
+      "png"
+    ],
+    "ProcessingVersion": "pass-through-png-v1"
+  }
+}

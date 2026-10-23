@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import sqlite3
+import json
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Request
@@ -15,30 +16,56 @@ from aiserver.api.validation import RequestValidator
 from aiserver.inference.fake import FakeBudget, FakeProvider, fake_profile
 from aiserver.jobs.scheduler import Scheduler
 from aiserver.operations.lock import InstanceLock
+from aiserver.operations.observability import RateLimits, service_logger
 from aiserver.settings import Settings
 from aiserver.storage.db import Store, TERMINAL, now_ms
+
+
+def json_capacity_method(profile):
+    snapshot = json.loads(profile.snapshot_json)
+    return snapshot.get("capacityMethod", snapshot.get("budgetMethod", "unknown"))
 
 def create_app(settings=None, *, profile=None, budget=None, provider=None):
     settings = settings or Settings.load()
     store = Store(settings)
-    profile = profile or fake_profile(settings)
-    budget = budget or FakeBudget(settings.fake_max_material_bytes)
-    provider = provider or FakeProvider(settings.fake_delay_seconds,settings.fake_scenario,settings.fake_late_seconds)
+    if settings.provider == "Ollama" and profile is None and budget is None and provider is None:
+        from aiserver.inference.runtime import load_profile, PracticalBudget, RealProvider
+        cfg, identity, prompt, profile = load_profile(settings)
+        budget = PracticalBudget(cfg, settings.system_prompt)
+        provider = RealProvider(settings, cfg, identity)
+    else:
+        profile = profile or fake_profile(settings)
+        budget = budget or FakeBudget(settings.fake_max_material_bytes)
+        provider = provider or FakeProvider(settings.fake_delay_seconds,settings.fake_scenario,settings.fake_late_seconds)
     scheduler = Scheduler(store,settings,profile,budget,provider)
     validator = RequestValidator(settings.contract_directory)
+    limits = RateLimits()
 
     @asynccontextmanager
     async def lifespan(app):
         lock = InstanceLock(settings.data_directory).acquire()
+        logger = handler = None
         try:
+            logger, handler = service_logger(settings)
+            app.state.logger = logger
             await asyncio.to_thread(store.initialize)
+            if hasattr(provider, "start"):
+                await provider.start()
             await scheduler.start()
+            logger.info("service_started provider=%s", profile.provider)
             try:
                 yield
             finally:
                 await scheduler.close()
         finally:
-            lock.release()
+            try:
+                await provider.aclose()
+            finally:
+                if logger:
+                    logger.info("service_stopped")
+                    logger.removeHandler(handler)
+                    handler.close()
+                lock.release()
 
     app = FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=settings.allowed_hosts)
@@ -50,6 +77,10 @@ def create_app(settings=None, *, profile=None, budget=None, provider=None):
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Trace-Id"] = request.state.trace_id
+        if hasattr(app.state, "logger"):
+            # Never log paths, query strings, authorization, request bodies, or output.
+            app.state.logger.info("request trace=%s method=%s status=%s", request.state.trace_id,
+                                  request.method, response.status_code)
         return response
 
     def error_response(request,error):
@@ -82,8 +113,21 @@ def create_app(settings=None, *, profile=None, budget=None, provider=None):
     async def user(request: Request):
         value = request.headers.get("authorization","")
         if not value.startswith("Bearer ") or len(value)>512:
+            if not limits.allow("auth_failed", settings.public_requests_per_minute):
+                raise ApiError(429, "RATE_LIMITED")
             raise ApiError(401,"UNAUTHORIZED")
-        return await asyncio.to_thread(store.authenticate,value[7:])
+        try:
+            identity = await asyncio.to_thread(store.authenticate,value[7:])
+        except ApiError:
+            if not limits.allow("auth_failed", settings.public_requests_per_minute):
+                raise ApiError(429, "RATE_LIMITED")
+            raise
+        if not limits.allow((identity, "requests"), settings.requests_per_minute):
+            raise ApiError(429, "RATE_LIMITED")
+        if request.method == "POST" and request.url.path == "/api/v1/jobs" and not limits.allow(
+                (identity, "submit"), settings.submissions_per_minute):
+            raise ApiError(429, "RATE_LIMITED")
+        return identity
 
     def uuid(value):
         try:
@@ -101,6 +145,8 @@ def create_app(settings=None, *, profile=None, budget=None, provider=None):
 
     @app.get("/api/v1/health")
     async def health():
+        if not limits.allow("health", settings.public_requests_per_minute):
+            raise ApiError(429, "RATE_LIMITED")
         if scheduler.fatal:
             raise ApiError(503,"SERVICE_NOT_READY")
         return {"status":"ok"}
@@ -113,6 +159,7 @@ def create_app(settings=None, *, profile=None, budget=None, provider=None):
                              "recommendedPollSeconds":settings.poll_seconds,
                              "inferenceProvider":profile.provider,
                              "acceptedInputTypes":list(scheduler.accepted_input_types),
+                             "capacityMethod":json_capacity_method(profile),
                              "storage":"ok" if not scheduler.fatal else "unavailable"},
                             status_code=200 if can_accept else 503)
 

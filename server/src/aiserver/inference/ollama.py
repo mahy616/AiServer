@@ -49,6 +49,7 @@ class OllamaAdapter:
     async def chat(self, prepared: PreparedPrompt) -> Generation:
         cfg = self.profile
         payload = {"model": cfg["Model"], "messages": prepared.messages(), "stream": False,
+                   "truncate": False, "shift": False,
                    "keep_alive": cfg["KeepAlive"],
                    "options": {"num_ctx": cfg["NumCtx"], "num_predict": cfg["NumPredict"],
                                "temperature": cfg["Temperature"], "top_p": cfg["TopP"],
@@ -57,6 +58,15 @@ class OllamaAdapter:
             async with asyncio.timeout(cfg["GenerateTimeoutSeconds"]):
                 async with self.client.stream("POST", "/api/chat", json=payload) as response:
                     if response.status_code != 200:
+                        error_body = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            error_body.extend(chunk)
+                            if len(error_body) > 8192:
+                                break
+                        message = error_body.decode("utf-8", "replace").lower()
+                        if response.status_code == 413 or (response.status_code == 400 and any(
+                                word in message for word in ("context length", "context window", "too long", "too large"))):
+                            raise ModelCallError("CONTEXT_TOO_LARGE", request_finished=True)
                         code = {404: "MODEL_CONFIG_ERROR", 400: "MODEL_CONFIG_ERROR",
                                 503: "MODEL_BUSY"}.get(response.status_code, "MODEL_UNAVAILABLE")
                         raise ModelCallError(code)
@@ -72,6 +82,11 @@ class OllamaAdapter:
             raise ModelCallError("MODEL_UNAVAILABLE") from error
         except (ValueError, UnicodeError) as error:
             raise ModelCallError("MODEL_PROTOCOL_ERROR") from error
+        if isinstance(data, dict) and "error" in data:
+            message = str(data["error"]).lower()
+            if any(word in message for word in ("context length", "context window", "too long", "too large")):
+                raise ModelCallError("CONTEXT_TOO_LARGE", request_finished=True)
+            raise ModelCallError("MODEL_PROTOCOL_ERROR")
         if not isinstance(data, dict) or data.get("done") is not True or data.get("model") != cfg["Model"]:
             raise ModelCallError("MODEL_PROTOCOL_ERROR")
         message = data.get("message")

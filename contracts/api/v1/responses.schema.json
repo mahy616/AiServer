@@ -126,6 +126,9 @@
         },
         "recommendedPollSeconds": {
           "type": "integer"
+        },
+        "capacityMethod": {
+          "type": "string"
         }
       }
     },
@@ -238,6 +241,35 @@
               }
             }
           ]
+        },
+        "generation": {
+          "type": "object",
+          "properties": {
+            "capacityMethod": {
+              "type": "string"
+            },
+            "estimatedInputTokens": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "inputTokens": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "outputTokens": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
         }
       }
     },

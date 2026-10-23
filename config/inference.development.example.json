@@ -1,14 +1,17 @@
 {
   "Provider": "Ollama",
-  "ProfileId": "dev-qwen3vl4b-4k-experiment-v1",
+  "ProfileId": "dev-qwen3vl4b-4k-v1",
   "EngineVersion": "0.40.9",
   "ExecutablePath": ".local/apps/ollama/v0.40.9/ollama.exe",
   "BaseUrl": "http://127.0.0.1:11434",
   "ModelsPath": ".local/ollama/models",
   "Model": "qwen3-vl:4b-instruct-q4_K_M",
   "ExpectedQuantization": "Q4_K_M",
-  "RequiredCapabilities": ["completion", "vision"],
-  "ModelLockPath": ".local/locks/model-development-vl4b.json",
+  "RequiredCapabilities": [
+    "completion",
+    "vision"
+  ],
+  "ModelLockPath": "config/models/qwen3vl4b.lock.json",
   "NumCtx": 4096,
   "NumPredict": 1024,
   "MaxInputTokens": 2560,
@@ -29,8 +32,13 @@
     "MaxBytesPerImage": 3145728,
     "MaxLongEdge": 1280,
     "MaxPixelsPerImage": 786432,
-    "AllowedFormats": ["png"],
+    "AllowedFormats": [
+      "png"
+    ],
     "ProcessingVersion": "pass-through-png-v1"
   },
-  "Budget": {"Method": "unverified-qwen3vl-v1", "Verified": false}
+  "Budget": {
+    "Method": "conservative-estimate-v1",
+    "IsExact": false
+  }
 }

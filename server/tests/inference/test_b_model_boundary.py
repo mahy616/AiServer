@@ -1,5 +1,7 @@
 """Small B-module checks; these do not certify real engine cancellation."""
 from pathlib import Path
+from io import BytesIO
+from PIL import Image
 import asyncio
 import json
 import sys
@@ -19,15 +21,22 @@ class ModelBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.cfg = json.loads((ROOT / "config/inference.development.example.json").read_text(encoding="utf-8"))
         self.request = {"operation": "modify", "instruction": "保留完整材料", "currentCode": "\r\n// 原代码\n",
                         "context": {"sdkReferenceText": "SDK"}, "history": [{"role": "assistant", "content": "资料"}]}
+        image = BytesIO()
+        Image.new("RGB", (32, 32), "white").save(image, format="PNG")
         self.prepared = prepare_prompt(self.request, ROOT / "config/prompts/s01-bootstrap-vl-v1.txt",
-                                       ((ROOT / "eval/cases/gap-threshold-v1/flow.png").read_bytes(),), self.cfg["ImagePolicy"])
+                                       (image.getvalue(),), self.cfg["ImagePolicy"])
 
-    def test_materials_are_preserved_and_unknown_budget_refuses(self):
+    def test_materials_preserved_and_estimate_never_becomes_actual_count(self):
         messages = self.prepared.messages()
         self.assertEqual(json.loads(messages[1]["content"])["currentCode"], self.request["currentCode"])
         self.assertEqual(len(messages[1]["images"]), 1)
         self.cfg["Budget"]["Verified"] = True
-        self.assertEqual(check_budget(self.prepared, self.cfg).code, "INPUT_BUDGET_UNVERIFIED")
+        result = check_budget(self.prepared, self.cfg)
+        self.assertIsNone(result.input_tokens)
+        self.assertGreater(result.estimated_input_tokens, 0)
+        self.assertEqual(result.method, "conservative-estimate-v1")
+        self.cfg["MaxInputTokens"] = 1
+        self.assertEqual(check_budget(self.prepared, self.cfg).code, "CONTEXT_TOO_LARGE")
 
     def test_corrupt_image_is_rejected(self):
         with self.assertRaises(Exception):

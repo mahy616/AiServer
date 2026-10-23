@@ -1,4 +1,4 @@
-"""B-owned preparation; A owns the eventual public Protocol and business DTOs."""
+"""Shared production material preparation; the HTTP contract remains separate."""
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -46,7 +46,7 @@ def prepare_prompt(request: dict, system_path: Path, image_bytes: tuple[bytes, .
         hashes.append(hashlib.sha256(raw).hexdigest())
     # History remains untrusted material inside user content, never system roles.
     order = (("context", "currentCode", "history", "operation", "instruction")
-             if system_path.stem == "s01-bootstrap-vl-v2" else
+             if system_path.stem != "s01-bootstrap-vl-v1" else
              ("operation", "instruction", "currentCode", "context", "history"))
     material = {key: request.get(key) for key in order}
     user = {"role": "user", "content": json.dumps(material, ensure_ascii=False, separators=(",", ":"))}

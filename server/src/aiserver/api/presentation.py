@@ -28,7 +28,9 @@ def result_response(row):
     generation = json.loads(row["metrics_json"]) if row["metrics_json"] else {}
     effective = json.loads(row["effective_settings_json"])
     generation.update({"profileId":row["profile_id"],"promptVersion":effective["prepared"]["prompt_version"],
-                       "inferenceProvider":effective["profile"]["provider"]})
+                       "inferenceProvider":effective["profile"]["provider"],
+                       "estimatedInputTokens":effective["prepared"].get("estimated_input_tokens"),
+                       "capacityMethod":effective["prepared"]["budget_method"]})
     return {"jobId":row["job_id"],"status":row["status"],
             "output":json.loads(row["output_json"]) if row["output_json"] else None,
             "validation":{"metadata":"not_run","compilation":"not_run","business":"not_run"},

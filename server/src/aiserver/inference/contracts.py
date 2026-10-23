@@ -5,7 +5,8 @@ never rebuild prompts in workers. Profile snapshot includes actual identity,
 digest/template/prompt/budget/image policy/parameters, without credentials.
 Cancellation: A sets stop then cancels the task; provider closes transport and
 raises CancelledError. Late returns are discarded; slot held until termination.
-automatic_cleanup_verified requires version-bound evidence of real cleanup.
+automatic_cleanup_verified is used only for development test providers.
+Real providers restart their managed engine to establish a fresh execution slot.
 Python task termination alone never certifies GPU stop.
 """
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ class PreparedInput:
     budget_method: str
     prompt_version: str
     input_tokens: int | None = None
+    estimated_input_tokens: int | None = None
 
 @dataclass(frozen=True)
 class BudgetCheck:
@@ -64,7 +66,7 @@ class ModelError(Exception):
         self.request_finished = request_finished
 
 class Budget(Protocol):
-    # Version-bound, actually verified capability. ready intersects this with Profile.
+    # Supported input types; capacityMethod distinguishes estimates from exact counts.
     accepted_input_types: tuple[str, ...]
 
     async def prepare(self, task: TaskInput, profile: Profile) -> BudgetCheck: ...

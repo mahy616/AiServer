@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 import hashlib
 import hmac
 import json
@@ -96,6 +96,45 @@ class Store:
     def mark_recovery(self, job, reason):
         with self.connection(True) as c:
             self._recovery(c, job, reason)
+
+    def engine_recovered(self, job):
+        """Called only after a managed engine restart and identity check succeed."""
+        with self.connection(True) as c:
+            c.execute("""UPDATE service_state SET recovery_required=0,recovery_reason=NULL,
+                recovery_job_id=NULL,recovered_at_ms=?,updated_at_ms=?,recovery_note='Managed engine restarted'
+                WHERE id=1 AND recovery_job_id IS ?""", (now_ms(), now_ms(), job))
+            if job:
+                c.execute("UPDATE jobs SET inference_stop_confirmed=1 WHERE job_id=?", (job,))
+
+    def backup(self, destination):
+        """SQLite backup API includes committed WAL pages; offline instance lock is held by CLI."""
+        destination = Path(destination)
+        if destination.exists() or destination.resolve() == self.path.resolve():
+            raise ValueError("Backup destination must be a new file")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self.connection() as source, closing(sqlite3.connect(destination)) as target:
+                source.backup(target)
+                if target.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                    raise RuntimeError("Backup integrity check failed")
+        except BaseException:
+            destination.unlink(missing_ok=True)
+            raise
+
+    def restore(self, source):
+        """Never overwrite an existing database; choose a new data directory."""
+        source = Path(source).resolve()
+        if self.path.exists() or not source.is_file():
+            raise ValueError("Restore requires an existing backup and a new data directory")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as backup, closing(sqlite3.connect(self.path)) as target:
+                if backup.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or backup.execute("PRAGMA user_version").fetchone()[0] != 1:
+                    raise ValueError("Invalid backup")
+                backup.backup(target)
+        except BaseException:
+            self.path.unlink(missing_ok=True)
+            raise
 
     def confirm_recovery(self, note):
         if not note.strip():

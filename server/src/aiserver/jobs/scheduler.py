@@ -3,6 +3,7 @@ from dataclasses import asdict
 import json
 import sqlite3
 import time
+import logging
 
 from aiserver.api.errors import ApiError
 from aiserver.inference.contracts import ModelError, PreparedInput
@@ -17,21 +18,30 @@ class Scheduler:
         self.state = "starting"
         self.stopping = False
         self.fatal = False
+        self.fatal_code = "SERVICE_NOT_READY"
         self.active_job = None
         self.worker = None
         self.orphans = set()
 
     async def db(self, method, *args):
-        return await asyncio.to_thread(method, *args)
+        try:
+            return await asyncio.to_thread(method, *args)
+        except sqlite3.Error:
+            self.fatal_code = "STORAGE_UNAVAILABLE"
+            raise
 
     async def start(self):
         await self.db(self.store.startup)
         await self.db(self.store.cleanup)
         recovery = await self.db(self.store.recovery)
         self.state = "recovering" if recovery["recovery_required"] else "available"
+        if recovery["recovery_required"] and hasattr(self.provider, "recover"):
+            await self.recover_engine(recovery["recovery_job_id"])
         self.worker = asyncio.create_task(self.run(), name="persistent-job-consumer")
 
     async def can_accept(self):
+        if self.fatal:
+            return False, self.fatal_code
         if self.stopping or self.fatal or self.state in ("starting", "paused", "stopping"):
             return False, "SERVICE_NOT_READY"
         state = await self.db(self.store.recovery)
@@ -106,16 +116,30 @@ class Scheduler:
             # No payload/exception text enters logs or responses.
             self.fatal = True
             self.state = "paused"
+            logging.getLogger("aiserver." + str(self.settings.data_directory)).error("worker_paused code=%s", self.fatal_code)
 
     async def save(self, method, *args):
         for attempt in range(3):
             try:
                 return await self.db(method,*args)
             except sqlite3.Error:
-                self.state = "paused"
                 if attempt == 2:
+                    self.state = "paused"
                     raise
                 await asyncio.sleep(1)
+
+    async def recover_engine(self, job):
+        self.state = "recovering"
+        try:
+            async with asyncio.timeout(self.settings.cleanup_timeout_seconds):
+                restored = await self.provider.recover()
+            if restored:
+                await self.db(self.store.engine_recovered, job)
+                self.state = "available"
+                return True
+        except Exception:
+            pass
+        return False
 
     async def execute(self, row):
         job = row["job_id"]
@@ -156,10 +180,14 @@ class Scheduler:
                         if not error.request_finished:
                             await self.db(self.store.mark_recovery,job,error.code)
                             self.state = "recovering"
+                            if hasattr(self.provider, "recover"):
+                                await self.recover_engine(job)
                     except Exception:
                         await self.save(self.store.finish,job,None,"MODEL_PROTOCOL_ERROR")
                         await self.db(self.store.mark_recovery,job,"MODEL_PROTOCOL_ERROR")
                         self.state = "recovering"
+                        if hasattr(self.provider, "recover"):
+                            await self.recover_engine(job)
                     # finish may have lost a race to an accepted cancel.
                     current = await self.db(self.store.by_job,job)
                     if current["status"] == "cancelling":
@@ -181,6 +209,8 @@ class Scheduler:
                 if done and self.profile.automatic_cleanup_verified:
                     await self.db(self.store.clear_cleanup,job)
                     self.state = "available"
+                elif done and hasattr(self.provider, "recover") and await self.recover_engine(job):
+                    pass
                 else:
                     await self.db(self.store.mark_recovery,job,"CLEANUP_UNCONFIRMED")
                     self.state = "recovering"
@@ -188,6 +218,16 @@ class Scheduler:
                         self.orphans.add(generation)
                         generation.add_done_callback(self.consume_orphan)
         finally:
+            if not generation.done():
+                generation.cancel()
+                done, _ = await asyncio.wait({generation}, timeout=1)
+                if done:
+                    self.consume_orphan(generation)
+                else:
+                    self.orphans.add(generation)
+                    generation.add_done_callback(self.consume_orphan)
+            logging.getLogger("aiserver." + str(self.settings.data_directory)).info(
+                "job_finished job=%s scheduler=%s", job, self.state)
             if self.state == "busy":
                 self.state = "available"
             self.active_job = None
