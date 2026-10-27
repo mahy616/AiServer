@@ -1,12 +1,8 @@
 """Shared production material preparation; the HTTP contract remains separate."""
 from dataclasses import dataclass
-from io import BytesIO
-from pathlib import Path
 import base64
 import hashlib
 import json
-
-from PIL import Image
 
 @dataclass(frozen=True)
 class PreparedPrompt:
@@ -15,45 +11,65 @@ class PreparedPrompt:
     prompt_version: str
     image_sha256: tuple[str, ...]
     text_utf8_bytes: int
+    tools_json: str = "[]"
+    options_json: str = "{}"
+    tool_choice: str = "auto"
+    parallel_tool_calls: bool = True
+    think: bool | None = None
+    think_provided: bool = False
+
+    def material_sha256(self):
+        material = json.dumps([self.messages_json, self.tools_json, self.options_json,
+                               self.tool_choice, self.parallel_tool_calls, self.think, self.think_provided], ensure_ascii=False)
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     def messages(self):
         return json.loads(self.messages_json)
 
 
-def prepare_prompt(request: dict, system_path: Path, image_bytes: tuple[bytes, ...],
-                   image_policy: dict) -> PreparedPrompt:
-    """Consume validated business materials, preserving all text and image bytes.
+def prepare_messages(request: dict, images, image_policy: dict) -> PreparedPrompt:
+    """Freeze client roles and ordered parts without injecting a system prompt.
 
-    This supplements (does not replace) A's transport/schema/ownership checks.
-    Expected answers from eval case.json are never supplied to this function.
+    Ollama's native API uses a string plus an images array. [img] preserves each
+    image's position in that string; original image bytes are passed unchanged.
     """
-    if len(image_bytes) > image_policy["MaxImages"]:
+    if len(images) > image_policy["MaxImages"]:
         raise ValueError("IMAGE_LIMIT_EXCEEDED")
-    images, hashes = [], []
-    for raw in image_bytes:
-        if len(raw) > image_policy["MaxBytesPerImage"]:
-            raise ValueError("IMAGE_LIMIT_EXCEEDED")
-        with Image.open(BytesIO(raw)) as picture:
-            width, height = picture.size
-            if picture.format != "PNG":
-                raise ValueError("IMAGE_INVALID")
-            if max(width, height) > image_policy["MaxLongEdge"] or width * height > image_policy["MaxPixelsPerImage"]:
-                raise ValueError("IMAGE_LIMIT_EXCEEDED")
-            picture.verify()
-        with Image.open(BytesIO(raw)) as picture:
-            picture.load()
-        images.append(base64.b64encode(raw).decode("ascii"))
-        hashes.append(hashlib.sha256(raw).hexdigest())
-    # History remains untrusted material inside user content, never system roles.
-    order = (("context", "currentCode", "history", "operation", "instruction")
-             if system_path.stem != "s01-bootstrap-vl-v1" else
-             ("operation", "instruction", "currentCode", "context", "history"))
-    material = {key: request.get(key) for key in order}
-    user = {"role": "user", "content": json.dumps(material, ensure_ascii=False, separators=(",", ":"))}
-    if images:
-        user["images"] = images
-    messages = [{"role": "system", "content": system_path.read_text(encoding="utf-8-sig")}, user]
+    messages, hashes = [], []
+    decoded = iter(images)
+    for original in request["messages"]:
+        pieces, encoded = [], []
+        for part in original["content"]:
+            if part["type"] == "text":
+                pieces.append(part["text"])
+            else:
+                image = next(decoded)
+                if (len(image.data) > image_policy["MaxBytesPerImage"] or
+                        max(image.width, image.height) > image_policy["MaxLongEdge"] or
+                        image.width * image.height > image_policy["MaxPixelsPerImage"]):
+                    raise ValueError("IMAGE_LIMIT_EXCEEDED")
+                pieces.append("[img]")
+                encoded.append(base64.b64encode(image.data).decode("ascii"))
+                hashes.append(image.sha256)
+        message = {"role": original["role"], "content": "".join(pieces)}
+        if "reasoning_content" in original:
+            message["thinking"] = original["reasoning_content"]
+        if original.get("tool_calls"):
+            message["tool_calls"] = [{"type": "function", "function": call["function"]}
+                                     for call in original["tool_calls"]]
+        if original["role"] == "tool":
+            message["tool_name"] = original["tool_name"]
+        if encoded:
+            message["images"] = encoded
+        messages.append(message)
     serialized = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
-    return PreparedPrompt(serialized, hashlib.sha256(serialized.encode()).hexdigest(),
-                          system_path.stem, tuple(hashes),
-                          sum(len(item["content"].encode("utf-8")) for item in messages))
+    tools = [{"type": "function", "function": {k: v for k, v in tool["function"].items() if k != "strict"}}
+             for tool in request.get("tools", [])]
+    prepared = PreparedPrompt(serialized, "", request.get("protocol", "client-messages-v1"), tuple(hashes),
+                              sum(len((m["content"] + m.get("thinking", "")).encode("utf-8")) for m in messages),
+                              json.dumps(tools, ensure_ascii=False, separators=(",", ":")),
+                              json.dumps(request.get("options", {})),
+                              request.get("tool_choice", "auto"), request.get("parallel_tool_calls", True),
+                              request.get("think"), "think" in request)
+    from dataclasses import replace
+    return replace(prepared, content_sha256=prepared.material_sha256())

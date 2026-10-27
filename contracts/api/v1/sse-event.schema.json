@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Parsed SSE event/data envelope; wire format is text/event-stream.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "event",
+        "data"
+      ],
+      "properties": {
+        "event": {
+          "const": "accepted"
+        },
+        "data": {
+          "$ref": "responses.schema.json#/$defs/accepted"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event",
+        "data"
+      ],
+      "properties": {
+        "event": {
+          "const": "status"
+        },
+        "data": {
+          "$ref": "responses.schema.json#/$defs/status"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event",
+        "data"
+      ],
+      "properties": {
+        "event": {
+          "const": "completed"
+        },
+        "data": {
+          "$ref": "responses.schema.json#/$defs/result"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event",
+        "data"
+      ],
+      "properties": {
+        "event": {
+          "const": "cancelled"
+        },
+        "data": {
+          "$ref": "responses.schema.json#/$defs/result"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event",
+        "data"
+      ],
+      "properties": {
+        "event": {
+          "const": "failed"
+        },
+        "data": {
+          "$ref": "responses.schema.json#/$defs/result"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event",
+        "data"
+      ],
+      "properties": {
+        "event": {
+          "enum": ["delta", "reasoning"]
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "jobId",
+            "sequence",
+            "text"
+          ],
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event",
+        "data"
+      ],
+      "properties": {
+        "event": {
+          "const": "error"
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "jobId",
+            "error",
+            "traceId"
+          ],
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "error": {
+              "$ref": "responses.schema.json#/$defs/error"
+            },
+            "traceId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

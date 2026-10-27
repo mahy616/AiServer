@@ -1,0 +1,45 @@
+{
+  "Provider": "Ollama",
+  "ProfileId": "qwen35-9b-q4-q8kv-80k-v1",
+  "EngineVersion": "0.40.9",
+  "ExecutablePath": ".local/apps/ollama/v0.40.9/ollama.exe",
+  "BaseUrl": "http://127.0.0.1:11434",
+  "ModelsPath": ".local/ollama/models",
+  "Model": "qwen3.5:9b-q4_K_M",
+  "ExpectedQuantization": "Q4_K_M",
+  "RequiredCapabilities": [
+    "completion",
+    "tools"
+  ],
+  "ModelLockPath": "config/models/qwen35.local.json",
+  "FlashAttention": true,
+  "KvCacheType": "q8_0",
+  "NumBatch": 128,
+  "NumCtx": 81920,
+  "NumPredict": 8192,
+  "ReservedTokens": 512,
+  "MaxTextUtf8Bytes": 2097152,
+  "KeepAlive": "10m",
+  "MaxLoadedModels": 1,
+  "NumParallel": 1,
+  "EngineMaxQueue": 1,
+  "ConnectTimeoutSeconds": 5,
+  "GenerateTimeoutSeconds": 3600,
+  "MaxResponseBytes": 8388608,
+  "ImagePolicy": {
+    "MaxImages": 0,
+    "MaxBytesPerImage": 0,
+    "MaxLongEdge": 0,
+    "MaxPixelsPerImage": 0,
+    "AllowedFormats": [],
+    "ProcessingVersion": "text-only-v1"
+  },
+  "Budget": {
+    "Method": "ollama-render-tokenizer-v1",
+    "IsExact": false,
+    "TokenizerPath": ".local/qwen35/source/tokenizer.json",
+    "TokenizerSha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+  },
+  "RequireFullGpu": true,
+  "GenerationDefaults": {}
+}

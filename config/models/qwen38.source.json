@@ -1,0 +1,17 @@
+{
+  "model": "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-IQ3_XXS",
+  "registry": "https://huggingface.co/v2/unsloth/Qwen3.8-27B-GGUF",
+  "manifest_path": "manifests/hf.co/unsloth/Qwen3.8-27B-GGUF/UD-IQ3_XXS",
+  "manifest_sha256": "db3df2eacb09ac7e960fae8287a65d59cde306e2d718176ca9997c040e2fde53",
+  "manifest": "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.docker.distribution.manifest.v2+json\",\"config\":{\"digest\":\"sha256:0a37a2af447b8e17b35f8665530eb70186abf9cfbfba35f57d46b5897baee670\",\"mediaType\":\"application/vnd.docker.container.image.v1+json\",\"size\":629},\"layers\":[{\"digest\":\"sha256:c0b7c3038681ed2e3040456c1dd45f9858b6c2290bed172c70388a94874f3eee\",\"mediaType\":\"application/vnd.ollama.image.model\",\"size\":10934860704},{\"digest\":\"sha256:8f9574668b580bc287b9bf20d5abb2fb74a2e6fb5c86aef5a46a1794b3912c62\",\"mediaType\":\"application/vnd.ollama.image.template\",\"size\":410},{\"digest\":\"sha256:83ee4f4f205fa514161778c41df1ea14144faa0f713510893b63c2395f5c2d53\",\"mediaType\":\"application/vnd.ollama.image.projector\",\"size\":931146432},{\"digest\":\"sha256:5fcd38a2a742528dc7498c42f524201cb8c77da4b96a86596234214b85a24a04\",\"mediaType\":\"application/vnd.ollama.image.params\",\"size\":67}]}",
+  "engine_version": "0.40.9",
+  "quantization": "IQ3_XXS",
+  "architecture": "qwen35",
+  "native_context": 262144,
+  "required_capabilities": [
+    "completion",
+    "tools",
+    "thinking"
+  ],
+  "reference": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF"
+}

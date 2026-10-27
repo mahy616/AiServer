@@ -8,6 +8,7 @@
     "localhost"
   ],
   "port": 18080,
+  "public_base_url": "",
   "fake_delay_seconds": 1,
   "fake_scenario": "success",
   "max_outstanding_global": 10,
@@ -15,6 +16,9 @@
   "queue_timeout_seconds": 1800,
   "execution_timeout_seconds": 600,
   "cleanup_timeout_seconds": 30,
-  "payload_days": 7,
-  "tombstone_days": 30
+  "payload_days": 1,
+  "tombstone_days": 30,
+  "manage_natapp": false,
+  "natapp_executable": ".local/natapp/natapp.exe",
+  "natapp_config": ".local/natapp/config.ini"
 }

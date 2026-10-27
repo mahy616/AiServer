@@ -1,0 +1,46 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "aiserver": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AiServer",
+      "options": {
+        "baseURL": "https://szzj.nat200.top/v1",
+        "timeout": 3600000
+      },
+      "models": {
+        "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k": {
+          "name": "Qwen2.5-Coder 7B Q5 / Q8 KV",
+          "tool_call": true,
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 81920,
+            "input": 73216,
+            "output": 8192
+          },
+          "reasoning": false,
+          "options": {
+            "think": false
+          }
+        }
+      }
+    }
+  },
+  "model": "aiserver/aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "compaction": {
+    "auto": true,
+    "reserved": 10000,
+    "prune": true
+  },
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}

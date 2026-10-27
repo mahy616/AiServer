@@ -22,4 +22,4 @@ if ($RunAsUser -eq 'SYSTEM') {
     $credential = Get-Credential -UserName $RunAsUser -Message 'Account must read Python/config/models and write .local. Credentials are stored by Windows Task Scheduler.'
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -User $credential.UserName -Password $credential.GetNetworkCredential().Password -RunLevel Highest | Out-Null
 }
-Write-Output "Registered $TaskName. Start-ScheduledTask after checking the target paths. Do not also launch Start-Ollama.py."
+Write-Output "Registered $TaskName. Start-ScheduledTask after checking the target paths. Run.py owns the engine and tunnel; disable separate launch tasks."

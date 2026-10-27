@@ -1,0 +1,14 @@
+[
+  "Install-Qwen38-DeepSeek.cmd",
+  "Install-DeepSeekCoderV2Lite.cmd",
+  "Enable-DeepSeekTools.cmd",
+  "scripts/inference/Install-Qwen38-DeepSeek.py",
+  "scripts/inference/Install-DeepSeekCoderV2Lite.py",
+  "scripts/inference/Enable-DeepSeekTools.py",
+  "scripts/inference/deepseek_tools.py",
+  "scripts/client/Verify-DeepSeekTools.py",
+  "config/inference.deepseek.example.json",
+  "config/inference.deepseek-tools.example.json",
+  "config/models/deepseek.source.json",
+  "config/templates/deepseek-json-tools-v1.gotmpl"
+]

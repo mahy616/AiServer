@@ -1,5 +1,0 @@
-先用一句话复述附图的执行顺序，然后输出一个完整 C# 脚本。
-在当前脚本工具 2 中读取工具 67 的 Distance，先用 Math.Round(value, 3) 取三位小数，写入工具 2 的 gap。
-读取全局 gap下限、gap上限，以舍入后的 gap 判断闭区间（两端等于阈值均合格）。合格写 status=1、message="OK"；不合格写 status=0、message="NG"。
-若 gap 或阈值为 NaN/Infinity，或下限大于上限，写 status=0、message="INVALID"，此时 gap 固定写 0。数据接口抛异常时也写相同 INVALID 和 gap=0。
-不得执行设备或修改其他变量。不要添加与本需求无关功能；代码不省略，保持简洁，无须逐行注释。

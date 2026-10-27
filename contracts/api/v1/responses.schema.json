@@ -22,7 +22,8 @@
         "details": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "errorResponse": {
       "type": "object",
@@ -35,18 +36,18 @@
           "$ref": "#/$defs/error"
         },
         "traceId": {
-          "type": "string"
+          "type": "string",
+          "format": "uuid"
         }
-      }
+      },
+      "additionalProperties": false
     },
-    "submission": {
+    "accepted": {
       "type": "object",
       "required": [
         "jobId",
         "clientRequestId",
-        "status",
-        "replayed",
-        "pollAfterSeconds"
+        "model"
       ],
       "properties": {
         "jobId": {
@@ -57,24 +58,11 @@
           "type": "string",
           "format": "uuid"
         },
-        "status": {
-          "enum": [
-            "queued",
-            "running",
-            "cancelling",
-            "succeeded",
-            "failed",
-            "cancelled"
-          ]
-        },
-        "replayed": {
-          "type": "boolean"
-        },
-        "pollAfterSeconds": {
-          "type": "integer",
-          "minimum": 1
+        "model": {
+          "type": "string"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ready": {
       "type": "object",
@@ -85,7 +73,9 @@
         "acceptedInputTypes",
         "reasonCode",
         "observedAt",
-        "recommendedPollSeconds"
+        "recommendedPollSeconds",
+        "capacityMethod",
+        "storage"
       ],
       "properties": {
         "canAcceptJobs": {
@@ -125,12 +115,20 @@
           "format": "date-time"
         },
         "recommendedPollSeconds": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0
         },
         "capacityMethod": {
           "type": "string"
+        },
+        "storage": {
+          "enum": [
+            "ok",
+            "unavailable"
+          ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "status": {
       "type": "object",
@@ -147,7 +145,9 @@
         "startedAt",
         "finishedAt",
         "payloadExpiresAt",
-        "pollAfterSeconds"
+        "pollAfterSeconds",
+        "stopReason",
+        "inferenceStopConfirmed"
       ],
       "properties": {
         "jobId": {
@@ -169,28 +169,194 @@
           ]
         },
         "queue": {
-          "type": [
-            "object",
-            "null"
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "waitingAhead",
+                "activeAhead",
+                "position",
+                "isPaused"
+              ],
+              "properties": {
+                "waitingAhead": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "activeAhead": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "position": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "isPaused": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
           ]
         },
         "timing": {
-          "type": "object"
+          "type": "object",
+          "required": [
+            "queueMs",
+            "executionMs"
+          ],
+          "properties": {
+            "queueMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "executionMs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "schedulerState": {
+          "enum": [
+            "starting",
+            "available",
+            "busy",
+            "draining",
+            "recovering",
+            "paused",
+            "stopping"
+          ]
         },
         "resultAvailable": {
           "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/error"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "startedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "finishedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "payloadExpiresAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "pollAfterSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stopReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inferenceStopConfirmed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
-      }
+      },
+      "additionalProperties": false
+    },
+    "generation": {
+      "type": "object",
+      "required": [
+        "inputTokens",
+        "outputTokens",
+        "finishReason",
+        "profileId",
+        "messageMappingVersion",
+        "inferenceProvider",
+        "estimatedInputTokens",
+        "capacityMethod"
+      ],
+      "properties": {
+        "inputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "finishReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "messageMappingVersion": {
+          "type": "string"
+        },
+        "inferenceProvider": {
+          "type": "string"
+        },
+        "estimatedInputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "capacityMethod": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "result": {
       "type": "object",
       "required": [
         "jobId",
+        "clientRequestId",
+        "model",
         "status",
         "output",
-        "validation",
-        "source",
         "generation",
+        "stopReason",
+        "inferenceStopConfirmed",
         "error",
         "payloadExpiresAt"
       ],
@@ -198,6 +364,13 @@
         "jobId": {
           "type": "string",
           "format": "uuid"
+        },
+        "clientRequestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "model": {
+          "type": "string"
         },
         "status": {
           "enum": [
@@ -209,13 +382,6 @@
             "cancelled"
           ]
         },
-        "validation": {
-          "const": {
-            "metadata": "not_run",
-            "compilation": "not_run",
-            "business": "not_run"
-          }
-        },
         "output": {
           "anyOf": [
             {
@@ -225,8 +391,7 @@
               "type": "object",
               "required": [
                 "text",
-                "isComplete",
-                "kind"
+                "isComplete"
               ],
               "properties": {
                 "text": {
@@ -235,43 +400,86 @@
                 "isComplete": {
                   "type": "boolean"
                 },
-                "kind": {
-                  "const": "unclassified"
+                "reasoningText": {
+                  "type": "string"
+                },
+                "toolCalls": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "type",
+                      "function"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "const": "function"
+                      },
+                      "index": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "function": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "arguments"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "arguments": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
-              }
+              },
+              "additionalProperties": false
             }
           ]
         },
         "generation": {
-          "type": "object",
-          "properties": {
-            "capacityMethod": {
-              "type": "string"
+          "$ref": "#/$defs/generation"
+        },
+        "stopReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inferenceStopConfirmed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "null"
             },
-            "estimatedInputTokens": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0
-            },
-            "inputTokens": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0
-            },
-            "outputTokens": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0
+            {
+              "$ref": "#/$defs/error"
             }
-          }
+          ]
+        },
+        "payloadExpiresAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "cancel": {
       "type": "object",
@@ -305,8 +513,20 @@
             "boolean",
             "null"
           ]
+        },
+        "schedulerState": {
+          "enum": [
+            "starting",
+            "available",
+            "busy",
+            "draining",
+            "recovering",
+            "paused",
+            "stopping"
+          ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "list": {
       "type": "object",
@@ -316,15 +536,293 @@
       ],
       "properties": {
         "items": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "sequence",
+              "jobId",
+              "clientRequestId",
+              "status",
+              "createdAt",
+              "finishedAt",
+              "errorCode",
+              "resultAvailable"
+            ],
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "jobId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "clientRequestId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "status": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "cancelling",
+                  "succeeded",
+                  "failed",
+                  "cancelled"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "finishedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "errorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "resultAvailable": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
         },
         "nextBeforeSequence": {
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "minimum": 0
         }
-      }
+      },
+      "additionalProperties": false
+    },
+    "models": {
+      "type": "object",
+      "required": [
+        "models"
+      ],
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "inputTypes",
+              "outputTypes",
+              "limits",
+              "capacityMethod",
+              "generationParameters"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "inputTypes": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "text",
+                    "image"
+                  ]
+                }
+              },
+              "outputTypes": {
+                "const": [
+                  "text"
+                ]
+              },
+              "limits": {
+                "type": "object",
+                "required": [
+                  "maxRequestBytes",
+                  "maxTextUtf8Bytes",
+                  "maxMessages",
+                  "maxImages",
+                  "imageMediaTypes",
+                  "maxImageBytes",
+                  "maxImageLongEdge",
+                  "maxImagePixels",
+                  "contextTokens",
+                  "maxInputTokens",
+                  "maxOutputTokens",
+                  "defaultMaxInputTokens",
+                  "reservedTokens",
+                  "inputBudgetPolicy"
+                ],
+                "properties": {
+                  "maxRequestBytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxTextUtf8Bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxMessages": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxImages": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "imageMediaTypes": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "image/png",
+                        "image/jpeg"
+                      ]
+                    },
+                    "uniqueItems": true
+                  },
+                  "maxImageBytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxImageLongEdge": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxImagePixels": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "contextTokens": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "maxInputTokens": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Maximum input with one output token; each request must satisfy contextTokens minus its effective output budget minus reservedTokens."
+                  },
+                  "maxOutputTokens": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "defaultMaxInputTokens": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "description": "Input limit with the server default/max output budget."
+                  },
+                  "reservedTokens": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "inputBudgetPolicy": {
+                    "enum": [
+                      "window-minus-output-v1",
+                      "provider-defined"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "capacityMethod": {
+                "type": "string"
+              },
+              "generationParameters": {
+                "const": "request-or-model-default"
+              },
+              "toolCall": {
+                "type": "boolean",
+                "description": "Whether the running provider verified native function calling for this model."
+              },
+              "outputChannels": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "content",
+                    "reasoning_content",
+                    "tool_calls"
+                  ]
+                }
+              },
+              "roleMappings": {
+                "type": "object",
+                "properties": {
+                  "developer": {
+                    "const": "system"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "outputLimitPolicy": {
+                "const": "reject-above-limit"
+              },
+              "thinking": {
+                "type": "boolean",
+                "description": "Engine-verified native thinking capability, not the enabled mode. Thinking defaults off and requires request think=true; unsupported models ignore the flag."
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "authUser": {
+      "type": "object",
+      "required": [
+        "userId",
+        "displayName"
+      ],
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "me": {
+      "type": "object",
+      "required": [
+        "user",
+        "expiresAt"
+      ],
+      "properties": {
+        "user": {
+          "$ref": "#/$defs/authUser"
+        },
+        "expiresAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

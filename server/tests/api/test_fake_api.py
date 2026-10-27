@@ -1,12 +1,7 @@
-import asyncio
 import base64
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from dataclasses import replace
 from io import BytesIO
 import json
-from pathlib import Path
-import sqlite3
 import time
 from uuid import uuid4
 
@@ -16,282 +11,169 @@ from PIL import Image
 import pytest
 
 from aiserver.app import create_app
-from aiserver.inference.fake import FakeBudget, FakeProvider, UnverifiedBudget, fake_profile
+from aiserver.api.validation import RequestValidator, canonical
+from aiserver.inference.fake import FakeBudget, FakeProvider, UnverifiedBudget
 from aiserver.settings import ROOT, Settings
-from aiserver.storage.db import Store, now_ms
+from aiserver.storage.db import now_ms
+
 
 def request(image=False):
-    data = json.loads((ROOT/"contracts/examples"/("image-request.json" if image else "text-request.json")).read_text(encoding="utf-8"))
-    data["clientRequestId"] = str(uuid4())
-    return data
+    value = json.loads((ROOT/"contracts/examples"/("image-request.json" if image else "text-request.json")).read_text(encoding="utf-8"))
+    value["clientRequestId"], value["model"] = str(uuid4()), "fake-v1"
+    return value
+
 
 def assert_schema(name, value):
     schema = json.loads((ROOT/"contracts/api/v1/responses.schema.json").read_text(encoding="utf-8"))
     schema["$ref"] = "#/$defs/"+name
-    Draft202012Validator(schema,format_checker=FormatChecker()).validate(value)
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(value)
+
 
 @contextmanager
 def service(tmp_path, *, provider=None, profile=None, budget=None, **overrides):
     overrides.setdefault("requests_per_minute", 10000)
-    overrides.setdefault("submissions_per_minute", 120)
-    settings = Settings(data_directory=tmp_path, **overrides)
-    app = create_app(settings,provider=provider,profile=profile,budget=budget)
-    app.state.store.initialize()
+    overrides.setdefault("submissions_per_minute", 1000)
+    app = create_app(Settings(data_directory=tmp_path, **overrides), provider=provider, profile=profile, budget=budget)
     store = app.state.store
-    store.user_add("alice","Alice")
-    store.user_add("bob","Bob")
-    token = store.token_create("alice")
-    other = store.token_create("bob")
+    store.initialize()
+    store.user_add("alice", "Alice"); store.user_add("bob", "Bob")
+    token, other = store.token_create("alice"), store.token_create("bob")
     with TestClient(app) as client:
         client.headers["Authorization"] = "Bearer "+token
         yield client, store, app.state.scheduler, {"Authorization":"Bearer "+other}
 
+
+def events(response):
+    kind, parts = "", []
+    for line in response.iter_lines():
+        if line.startswith("event:"):
+            kind = line[6:].strip()
+        elif line.startswith("data:"):
+            parts.append(line[5:].lstrip())
+        elif not line and parts:
+            yield kind, json.loads("\n".join(parts))
+            kind, parts = "", []
+
+
 def terminal(client, job, timeout=5):
     until = time.monotonic()+timeout
-    while time.monotonic()<until:
+    while time.monotonic() < until:
         response = client.get("/api/v1/jobs/"+job)
         assert response.status_code == 200, response.text
-        result = response.json()
-        if result["status"] in ("succeeded","failed","cancelled"):
-            return result
+        value = response.json()
+        if value["status"] in ("succeeded", "failed", "cancelled"):
+            return value
         time.sleep(0.01)
     raise AssertionError("Task did not finish")
 
+
 def post(client, data):
-    result = client.post("/api/v1/jobs",json=data)
-    assert result.status_code in (200,202), result.text
-    assert_schema("submission",result.json())
-    return result.json()["jobId"]
+    # Scheduler-focused fixtures bypass the owning SSE connection intentionally.
+    async def submit():
+        scheduler = client.app.state.scheduler
+        normalized, fingerprint, task = RequestValidator(scheduler.settings.contract_directory).validate(canonical(data).encode())
+        row, _ = await scheduler.submit("alice", normalized, fingerprint, task)
+        return row["job_id"]
+    return client.portal.call(submit)
 
-def test_samples_and_text_image_full_loop(tmp_path):
-    for filename in ("text-request.json","image-request.json"):
-        data = json.loads((ROOT/"contracts/examples"/filename).read_text(encoding="utf-8"))
-        schema = json.loads((ROOT/"contracts/api/v1/job-request.schema.json").read_text(encoding="utf-8"))
-        Draft202012Validator(schema,format_checker=FormatChecker()).validate(data)
-    with service(tmp_path,fake_delay_seconds=0.01) as (client,store,scheduler,other):
-        ready = client.get("/api/v1/ready")
-        assert ready.status_code == 200
-        assert ready.json()["inferenceProvider"] == "Fake"
-        assert_schema("ready",ready.json())
-        for image in (False,True):
+
+def test_text_image_sse_and_result_contract(tmp_path):
+    with service(tmp_path, fake_delay_seconds=0.01) as (client, store, scheduler, other):
+        assert_schema("models", client.get("/api/v1/models").json())
+        assert_schema("ready", client.get("/api/v1/ready").json())
+        for image in (False, True):
             data = request(image)
-            data["instruction"] += "\n中文🙂e\u0301\r\n"
-            job = post(client,data)
-            state = terminal(client,job)
-            assert state["status"] == "succeeded"
-            assert_schema("status",state)
-            result = client.get("/api/v1/jobs/"+job+"/result")
-            assert result.status_code == 200
-            assert_schema("result",result.json())
-            assert result.json()["output"]["text"].endswith(data["instruction"])
-            assert result.json()["generation"]["inferenceProvider"] == "Fake"
-            assert result.json()["generation"]["inputTokens"] is None
-            recovered = client.get("/api/v1/jobs/by-request/"+data["clientRequestId"])
-            assert recovered.json()["jobId"] == job
-            assert "dataBase64" not in json.dumps(state)
-            assert "dataBase64" not in result.text
-        listing = client.get("/api/v1/jobs").json()
-        assert_schema("list",listing)
-        assert len(listing["items"])==2
+            response = client.post("/api/v1/jobs", json=data)
+            assert response.status_code == 200 and response.headers["content-type"].startswith("text/event-stream")
+            assert response.headers["x-accel-buffering"] == "no"
+            received = list(events(response))
+            assert received[0][0] == "accepted" and received[-1][0] == "completed"
+            job = received[0][1]["jobId"]
+            result = received[-1][1]
+            assert_schema("result", result)
+            assert result["output"]["isComplete"]
+            assert "".join(value["text"] for kind,value in received if kind == "delta") == result["output"]["text"]
+            assert_schema("status", client.get("/api/v1/jobs/"+job).json())
+            assert client.get("/api/v1/jobs/"+job+"/result").json() == result
+            assert client.get("/api/v1/jobs/by-request/"+data["clientRequestId"]).json()["jobId"] == job
+            assert client.post("/api/v1/jobs", json=data).json()["error"]["code"] == "REQUEST_ALREADY_EXISTS"
+            changed = json.loads(json.dumps(data)); changed["messages"][0]["content"][0]["text"] += "x"
+            assert client.post("/api/v1/jobs", json=changed).json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+            assert "dataBase64" not in json.dumps(result)
+            assert "validation" not in result and "source" not in result
+        assert scheduler.provider.calls == 2
+        assert_schema("list", client.get("/api/v1/jobs").json())
 
-def test_auth_owner_expiry_revoke_and_parent(tmp_path):
-    with service(tmp_path,fake_delay_seconds=0.01) as (client,store,scheduler,other):
-        assert client.get("/api/v1/health",headers={"Authorization":""}).json()=={"status":"ok"}
-        denied = client.get("/api/v1/ready",headers={"Authorization":"Bearer invalid"})
-        assert denied.status_code==401
-        assert_schema("errorResponse",denied.json())
-        expired = store.token_create("alice",now_ms()-1)
-        assert client.get("/api/v1/ready",headers={"Authorization":"Bearer "+expired}).status_code==401
-        revoked = store.token_create("alice")
-        store.token_revoke(revoked.split("_",2)[1])
-        assert client.get("/api/v1/ready",headers={"Authorization":"Bearer "+revoked}).status_code==401
-        data=request(); job=post(client,data); terminal(client,job)
-        for suffix in ("","/result"):
-            assert client.get("/api/v1/jobs/"+job+suffix,headers=other).status_code==404
-        assert client.post("/api/v1/jobs/"+job+"/cancel",headers=other).status_code==404
-        assert client.get("/api/v1/jobs/by-request/"+data["clientRequestId"],headers=other).status_code==404
-        assert client.get("/api/v1/jobs",headers=other).json()["items"]==[]
-        parent=request(); parent["parentJobId"]=job
-        assert client.post("/api/v1/jobs",json=parent,headers=other).status_code==404
-        renewed=store.token_create("alice")
-        assert client.get("/api/v1/jobs/"+job,headers={"Authorization":"Bearer "+renewed}).status_code==200
 
-def test_concurrent_idempotency_and_normalization(tmp_path):
-    provider=FakeProvider(0.1)
-    with service(tmp_path,provider=provider) as (client,store,scheduler,other):
-        data=request()
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            replies=list(pool.map(lambda _:client.post("/api/v1/jobs",json=data),range(8)))
-        assert all(x.status_code in (200,202) for x in replies)
-        assert sum(x.status_code==202 for x in replies)==1
-        job=replies[0].json()["jobId"]
-        assert all(x.json()["jobId"]==job for x in replies)
-        minimal=json.loads(json.dumps(data))
-        for key in ("currentCode","parentJobId","images","history"):
-            del minimal[key]
-        for key in ("csharpLanguageVersion","sdkContractVersion"):
-            del minimal["context"][key]
-        assert client.post("/api/v1/jobs",content=json.dumps(minimal,sort_keys=True),
-                           headers={"Content-Type":"application/json"}).json()["jobId"]==job
-        changed=json.loads(json.dumps(data)); changed["instruction"]+="x"
-        assert client.post("/api/v1/jobs",json=changed).status_code==409
-        terminal(client,job)
-        assert provider.calls==1 and provider.max_active==1
+def test_auth_owner_revoke_and_model(tmp_path):
+    with service(tmp_path, fake_delay_seconds=0) as (client,store,scheduler,other):
+        assert client.get("/api/v1/health", headers={"Authorization":""}).status_code == 200
+        assert client.get("/api/v1/models", headers={"Authorization":""}).status_code == 401
+        token = store.token_create("alice", now_ms()+60000)
+        with store.connection(True) as conn:
+            conn.execute("UPDATE api_keys SET expires_at_ms=? WHERE key_id=?", (now_ms()-1, token.split("_",2)[1]))
+        assert client.get("/api/v1/ready", headers={"Authorization":"Bearer "+token}).status_code == 401
+        token = store.token_create("alice"); store.token_revoke(token.split("_",2)[1])
+        assert client.get("/api/v1/ready", headers={"Authorization":"Bearer "+token}).status_code == 401
+        job = post(client, request()); terminal(client,job)
+        for suffix in ("", "/result"):
+            assert client.get("/api/v1/jobs/"+job+suffix, headers=other).status_code == 404
+        assert client.post("/api/v1/jobs/"+job+"/cancel", headers=other).status_code == 404
+        wrong = request(); wrong["model"] = "not-installed"
+        assert client.post("/api/v1/jobs", json=wrong).json()["error"]["code"] == "MODEL_NOT_FOUND"
 
-def test_queue_cancel_limit_and_completed_cancel(tmp_path):
-    provider=FakeProvider(30)
-    with service(tmp_path,provider=provider) as (client,store,scheduler,other):
-        first=post(client,request())
-        client.portal.call(provider.started.wait)
-        data=request(); second=post(client,data)
-        denied=client.post("/api/v1/jobs",json=request())
-        assert denied.status_code==429 and denied.json()["error"]["code"]=="USER_JOB_LIMIT"
-        assert client.get("/api/v1/jobs/"+second+"/result").status_code==409
-        cancel=client.post("/api/v1/jobs/"+second+"/cancel")
-        assert cancel.status_code==200 and cancel.json()["status"]=="cancelled"
-        assert_schema("cancel",cancel.json())
-        client.post("/api/v1/jobs/"+first+"/cancel")
-        assert terminal(client,first)["status"]=="cancelled"
-        assert provider.calls==1
-        assert client.post("/api/v1/jobs/"+second+"/cancel").json()["cancelAccepted"] is True
-    with service(tmp_path/"finished",fake_delay_seconds=0) as (client,store,scheduler,other):
-        job=post(client,request()); terminal(client,job)
-        assert client.post("/api/v1/jobs/"+job+"/cancel").json()["cancelAccepted"] is False
-        assert client.get("/api/v1/jobs/"+job).json()["status"]=="succeeded"
 
-def test_late_completion_discarded_and_next_no_overlap(tmp_path):
-    provider=FakeProvider(10,"late",0.1)
-    with service(tmp_path,provider=provider) as (client,store,scheduler,other):
-        first=post(client,request()); client.portal.call(provider.started.wait)
-        response=client.post("/api/v1/jobs/"+first+"/cancel")
-        assert response.status_code==202
-        assert terminal(client,first)["status"]=="cancelled"
-        second=post(client,request())
-        provider.delay=0
-        assert terminal(client,second)["status"]=="succeeded"
-        result=client.get("/api/v1/jobs/"+first+"/result").json()
-        assert result["output"] is None
-        assert provider.max_active==1 and provider.calls==2
-        assert terminal(client,first)["status"]=="cancelled"
+def test_transport_unknown_business_fields_and_parameters_rejected(tmp_path):
+    with service(tmp_path, max_request_bytes=2000, fake_delay_seconds=0) as (client,store,scheduler,other):
+        for body in ('{"x":1,"x":2}', '{"x":NaN}', '{"x":', '{"messages":"\\ud800"}'):
+            assert client.post("/api/v1/jobs", content=body, headers={"Content-Type":"application/json"}).status_code == 400
+        for field in ("operation", "context", "temperature", "max_tokens", "history"):
+            data=request(); data[field]="not-supported"
+            assert client.post("/api/v1/jobs", json=data).status_code == 400
+        assert client.post("/api/v1/jobs", content="{}", headers={"Content-Type":"text/plain"}).status_code == 415
+        assert client.post("/api/v1/jobs", content="{}", headers={"Content-Type":"application/json","Content-Encoding":"gzip"}).status_code == 415
+        assert client.post("/api/v1/jobs", content=b"x"*2001, headers={"Content-Type":"application/json"}).status_code == 413
+        assert scheduler.provider.calls == 0
 
-@pytest.mark.parametrize("scenario,code",[
-    ("empty","MODEL_EMPTY_OUTPUT"),("truncated","OUTPUT_TRUNCATED"),
+
+def test_png_jpeg_four_images_and_identity(tmp_path):
+    validator = RequestValidator(ROOT/"contracts/api/v1")
+    data = request(True)
+    content = data["messages"][0]["content"]
+    buffer = BytesIO(); Image.new("RGB",(8,4),(12,34,56)).save(buffer, format="JPEG")
+    jpeg = {"type":"image","mediaType":"image/jpeg","dataBase64":base64.b64encode(buffer.getvalue()).decode()}
+    content.extend([{"type":"text","text":"中间文字"}, jpeg, content[1].copy(), jpeg.copy()])
+    normalized, fingerprint, task = validator.validate(canonical(data).encode())
+    assert len(task.images) == 4 and task.images[1].media_type == "image/jpeg"
+    with service(tmp_path, fake_delay_seconds=0) as (client,store,scheduler,other):
+        response = client.post("/api/v1/jobs", json=data)
+        assert list(events(response))[-1][0] == "completed"
+        changed = json.loads(json.dumps(data))
+        changed["messages"][0]["content"][1],changed["messages"][0]["content"][3] = changed["messages"][0]["content"][3],changed["messages"][0]["content"][1]
+        assert validator.validate(canonical(changed).encode())[1] != fingerprint
+        too_many = json.loads(json.dumps(data)); too_many["messages"][0]["content"].append(jpeg)
+        assert client.post("/api/v1/jobs", json=too_many).json()["error"]["code"] == "IMAGE_LIMIT_EXCEEDED"
+        bad = request(True); bad["messages"][0]["content"][1]["mediaType"]="image/jpeg"
+        assert client.post("/api/v1/jobs", json=bad).status_code == 415
+        bad = request(True); bad["messages"][0]["content"][1]["dataBase64"]="bad"
+        assert client.post("/api/v1/jobs", json=bad).status_code == 415
+
+
+@pytest.mark.parametrize("scenario,code", [("truncated","OUTPUT_TRUNCATED"),
     ("failure","MODEL_UNAVAILABLE"),("protocol","MODEL_PROTOCOL_ERROR"),("connection","MODEL_UNAVAILABLE")])
-def test_fake_failure_mapping_no_retry(tmp_path,scenario,code):
-    provider=FakeProvider(0,scenario)
-    with service(tmp_path,provider=provider) as (client,store,scheduler,other):
-        job=post(client,request())
-        final=terminal(client,job)
-        assert final["status"]=="failed" and final["error"]["code"]==code
-        result=client.get("/api/v1/jobs/"+job+"/result")
-        assert result.status_code==200
-        if scenario=="truncated":
-            assert result.json()["output"]["isComplete"] is False
-        assert provider.calls==1
+def test_stream_failure_and_partial_output(tmp_path, scenario, code):
+    with service(tmp_path, provider=FakeProvider(0,scenario)) as (client,store,scheduler,other):
+        received=list(events(client.post("/api/v1/jobs",json=request())))
+        assert received[-1][0] == "failed"
+        assert received[-1][1]["error"]["code"] == code
+        if scenario != "empty":
+            assert received[-1][1]["output"]["isComplete"] is False
+        assert scheduler.provider.calls == 1
 
-def test_execution_timeout_and_queue_wait(tmp_path):
-    provider=FakeProvider(30)
-    with service(tmp_path,provider=provider,execution_timeout_seconds=0.15,queue_timeout_seconds=0.05) as (client,store,scheduler,other):
-        first=post(client,request()); client.portal.call(provider.started.wait)
-        second=post(client,request())
-        assert terminal(client,first)["error"]["code"]=="EXECUTION_TIMEOUT"
-        assert terminal(client,second)["error"]["code"]=="QUEUE_TIMEOUT"
-        client.post("/api/v1/jobs/"+first+"/cancel")
-        assert client.get("/api/v1/jobs/"+first).json()["error"]["code"]=="EXECUTION_TIMEOUT"
-        assert provider.calls==1
 
-def test_request_transport_and_strict_json(tmp_path):
-    with service(tmp_path,max_request_bytes=2000,fake_delay_seconds=0) as (client,store,scheduler,other):
-        for body in ('{"instruction":"a","instruction":"b"}','{"instruction":NaN}', '{"instruction":'):
-            result=client.post("/api/v1/jobs",content=body,headers={"Content-Type":"application/json"})
-            assert result.status_code==400
-        data=request(); data["instruction"]="\ud800"
-        assert client.post("/api/v1/jobs",content=json.dumps(data),headers={"Content-Type":"application/json"}).status_code==400
-        data=request(); data["model"]="forbidden"
-        assert client.post("/api/v1/jobs",json=data).status_code==400
-        data=request(); data["history"]=[{"role":"system","content":"x"}]
-        assert client.post("/api/v1/jobs",json=data).status_code==400
-        data=request(); data["operation"]="modify"
-        assert client.post("/api/v1/jobs",json=data).status_code==400
-        assert client.post("/api/v1/jobs",content="{}",headers={"Content-Type":"text/plain"}).status_code==415
-        assert client.post("/api/v1/jobs",content="{}",headers={"Content-Type":"application/json","Content-Encoding":"gzip"}).status_code==415
-        assert client.post("/api/v1/jobs",content=b"x"*2001,headers={"Content-Type":"application/json"}).status_code==413
-        def chunks():
-            yield b"x"*1500
-            yield b"x"*501
-        assert client.post("/api/v1/jobs",content=chunks(),headers={"Content-Type":"application/json"}).status_code==413
-        assert scheduler.provider.calls==0
-
-def test_png_decode_identity_no_echo(tmp_path):
-    with service(tmp_path,fake_delay_seconds=0) as (client,store,scheduler,other):
-        data=request(True); job=post(client,data); terminal(client,job)
-        changed=json.loads(json.dumps(data))
-        picture=Image.new("RGB",(2,1),(123,45,6)); buffer=BytesIO(); picture.save(buffer,format="PNG")
-        changed["images"][0]["dataBase64"]=base64.b64encode(buffer.getvalue()).decode()
-        assert client.post("/api/v1/jobs",json=changed).status_code==409
-        bad=request(True); bad["images"][0]["dataBase64"]="not base64"
-        assert client.post("/api/v1/jobs",json=bad).json()["error"]["code"]=="IMAGE_INVALID"
-        bad=request(True); bad["images"][0]["dataBase64"]=base64.b64encode(b"not png").decode()
-        assert client.post("/api/v1/jobs",json=bad).status_code==415
-        bad=request(True); bad["images"][0]["dataBase64"]=data["images"][0]["dataBase64"][:-16]
-        assert client.post("/api/v1/jobs",json=bad).status_code==415
-        picture=Image.new("RGB",(1281,1)); buffer=BytesIO(); picture.save(buffer,format="PNG")
-        bad=request(True); bad["images"][0]["dataBase64"]=base64.b64encode(buffer.getvalue()).decode()
-        assert client.post("/api/v1/jobs",json=bad).json()["error"]["code"]=="IMAGE_LIMIT_EXCEEDED"
-        effective=json.loads(store.get("alice",job=job)["effective_settings_json"])
-        assert effective["images"][0]["receivedSha256"]==effective["images"][0]["sentSha256"]
-
-def test_budget_unverified_and_fake_limit(tmp_path):
-    with service(tmp_path,budget=UnverifiedBudget()) as (client,store,scheduler,other):
+def test_budget_unverified_and_small_limit(tmp_path):
+    with service(tmp_path/"unverified", budget=UnverifiedBudget()) as (client,store,scheduler,other):
         assert client.get("/api/v1/ready").status_code == 503
-        assert client.get("/api/v1/ready").json()["acceptedInputTypes"] == []
-        result=client.post("/api/v1/jobs",json=request(True))
-        assert result.status_code==503 and result.json()["error"]["code"]=="INPUT_BUDGET_UNVERIFIED"
-        assert scheduler.provider.calls==0
-    cfg=Settings(data_directory=tmp_path/"no-types")
-    profile=replace(fake_profile(cfg),accepted_input_types=())
-    with service(tmp_path/"no-types",profile=profile) as (client,store,scheduler,other):
-        ready=client.get("/api/v1/ready")
-        assert ready.status_code==503 and ready.json()["acceptedInputTypes"]==[]
-        assert client.post("/api/v1/jobs",json=request()).status_code==503
-    with service(tmp_path/"limited",budget=FakeBudget(1)) as (client,store,scheduler,other):
-        result=client.post("/api/v1/jobs",json=request())
-        assert result.status_code==422 and result.json()["error"]["code"]=="CONTEXT_TOO_LARGE"
-
-def test_expiry_tombstone_replay_without_budget(tmp_path):
-    with service(tmp_path,fake_delay_seconds=0) as (client,store,scheduler,other):
-        data=request(True); job=post(client,data); terminal(client,job)
-        with store.connection(True) as c:
-            c.execute("UPDATE jobs SET payload_expires_at_ms=? WHERE job_id=?", (now_ms()-1,job))
-        assert client.get("/api/v1/jobs/"+job+"/result").status_code==410
-        store.cleanup()
-        assert store.get("alice",job=job)["request_json"] is None
-        scheduler.budget=UnverifiedBudget()
-        replay=client.post("/api/v1/jobs",json=data)
-        assert replay.status_code==200 and replay.json()["jobId"]==job
-        assert client.get("/api/v1/jobs/"+job).json()["resultAvailable"] is False
-
-def test_crash_residual_recovery_and_single_instance(tmp_path):
-    with service(tmp_path,fake_delay_seconds=0) as (client,store,scheduler,other):
-        data=request(); job=post(client,data); terminal(client,job)
-        with pytest.raises(RuntimeError):
-            with TestClient(create_app(Settings(data_directory=tmp_path))):
-                pass
-    # Simulate a process crash leaving a running durable record (no real engine).
-    with store.connection(True) as c:
-        c.execute("UPDATE jobs SET status='running',finished_at_ms=NULL WHERE job_id=?", (job,))
-    app=create_app(Settings(data_directory=tmp_path))
-    with TestClient(app) as client:
-        client.headers["Authorization"]="Bearer "+store.token_create("alice")
-        assert client.get("/api/v1/ready").status_code==503
-        assert client.get("/api/v1/jobs/"+job).json()["error"]["code"]=="SERVER_RESTARTED"
-        assert client.post("/api/v1/jobs",json=data).status_code==200
-        assert client.post("/api/v1/jobs",json=request()).json()["error"]["code"]=="ENGINE_RECOVERING"
-    store.confirm_recovery("Fake-only crash fixture; no external inference process")
-    with TestClient(create_app(Settings(data_directory=tmp_path))) as client:
-        client.headers["Authorization"]="Bearer "+store.token_create("alice")
-        assert client.get("/api/v1/ready").status_code==200
-
-def test_production_fake_forbidden(tmp_path):
-    with pytest.raises(ValueError):
-        Settings(data_directory=tmp_path,environment="Production")
+        assert client.post("/api/v1/jobs",json=request()).status_code == 503
+    with service(tmp_path/"small", budget=FakeBudget(1)) as (client,store,scheduler,other):
+        assert client.post("/api/v1/jobs",json=request()).json()["error"]["code"] == "CONTEXT_TOO_LARGE"

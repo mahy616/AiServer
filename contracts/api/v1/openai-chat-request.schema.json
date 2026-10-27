@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model", "messages"],
+  "properties": {
+    "model": {"type": "string", "minLength": 1, "maxLength": 128},
+    "messages": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"$ref": "#/$defs/message"}},
+    "stream": {"type": "boolean"},
+    "stream_options": {"type": "object", "additionalProperties": false, "properties": {"include_usage": {"type": "boolean"}}},
+    "tools": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/tool"}},
+    "tool_choice": {"oneOf": [
+      {"enum": ["auto", "none", "required"]},
+      {"type": "object", "additionalProperties": false, "required": ["type", "function"], "properties": {
+        "type": {"const": "function"},
+        "function": {"type": "object", "additionalProperties": false, "required": ["name"], "properties": {"name": {"$ref": "#/$defs/name"}}}
+      }}
+    ]},
+    "parallel_tool_calls": {"type": "boolean"},
+    "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+    "top_p": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+    "seed": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+    "top_k": {"type": "integer", "minimum": 0, "maximum": 100000},
+    "presence_penalty": {"type": "number", "minimum": -2, "maximum": 2},
+    "repeat_penalty": {"type": "number", "minimum": 0, "maximum": 10},
+    "think": {"type": ["boolean", "null"], "default": false, "description": "Request opt-in: absent/null/false disables thinking; true enables only engine-verified thinking models. Unsupported models ignore this flag. Legacy GenerationDefaults.think does not enable thinking."},
+    "max_tokens": {"type": "integer", "minimum": 1, "maximum": 1048576},
+    "max_completion_tokens": {"type": "integer", "minimum": 1, "maximum": 1048576},
+    "stop": {"oneOf": [
+      {"type": "string", "minLength": 1, "maxLength": 256},
+      {"type": "array", "maxItems": 4, "items": {"type": "string", "minLength": 1, "maxLength": 256}}
+    ]},
+    "n": {"const": 1},
+    "user": {"type": "string", "maxLength": 256}
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[a-zA-Z0-9_-]{1,64}$"},
+    "part": {"oneOf": [
+      {"type": "object", "additionalProperties": false, "required": ["type", "text"], "properties": {
+        "type": {"const": "text"}, "text": {"type": "string", "maxLength": 2097152}
+      }},
+      {"type": "object", "additionalProperties": false, "required": ["type", "image_url"], "properties": {
+        "type": {"const": "image_url"},
+        "image_url": {"type": "object", "additionalProperties": false, "required": ["url"], "properties": {
+          "url": {"type": "string", "maxLength": 4194340}, "detail": {"enum": ["auto", "low", "high"]}
+        }}
+      }}
+    ]},
+    "call": {
+      "type": "object", "additionalProperties": false, "required": ["id", "type", "function"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128}, "type": {"const": "function"},
+        "function": {"type": "object", "additionalProperties": false, "required": ["name", "arguments"], "properties": {
+          "name": {"$ref": "#/$defs/name"}, "arguments": {"type": "string", "maxLength": 2097152}
+        }}
+      }
+    },
+    "tool": {
+      "type": "object", "additionalProperties": false, "required": ["type", "function"],
+      "properties": {
+        "type": {"const": "function"},
+        "function": {"type": "object", "additionalProperties": false, "required": ["name", "parameters"], "properties": {
+          "name": {"$ref": "#/$defs/name"}, "description": {"type": "string", "maxLength": 2097152},
+          "parameters": {"type": "object"}, "strict": {"type": ["boolean", "null"]}
+        }}
+      }
+    },
+    "message": {
+      "type": "object", "additionalProperties": false, "required": ["role"],
+      "properties": {
+        "role": {"enum": ["system", "developer", "user", "assistant", "tool"]},
+        "content": {"oneOf": [{"type": ["string", "null"], "maxLength": 2097152}, {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/part"}}]},
+        "tool_calls": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"$ref": "#/$defs/call"}},
+        "tool_call_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "name": {"$ref": "#/$defs/name"},
+        "reasoning_content": {"type": "string", "maxLength": 2097152}
+      }
+    }
+  }
+}

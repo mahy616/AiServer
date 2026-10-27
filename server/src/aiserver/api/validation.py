@@ -12,8 +12,28 @@ from PIL import Image, UnidentifiedImageError
 from .errors import ApiError
 from aiserver.inference.contracts import ImageInput, TaskInput
 
+MAX_TEXT_UTF8_BYTES = 2097152
+
+
+def request_text_bytes(request):
+    total = sum(len(part["text"].encode("utf-8")) for message in request["messages"]
+                for part in message["content"] if part["type"] == "text")
+    if request.get("tools"):
+        total += len(canonical(request["tools"]).encode("utf-8"))
+    total += sum(len(canonical(message["tool_calls"]).encode("utf-8"))
+                 for message in request["messages"] if message.get("tool_calls"))
+    total += sum(len(message.get("reasoning_content", "").encode("utf-8")) for message in request["messages"])
+    return total
+
+
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def wire_json(value):
+    """Keep insertion order for model material; canonical JSON is for identity only."""
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+
 
 def unique_pairs(pairs):
     result = {}
@@ -23,16 +43,18 @@ def unique_pairs(pairs):
         result[key] = value
     return result
 
+
 def strict_json(raw):
     try:
         value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_pairs,
                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite")))
-        canonical(value).encode("utf-8")  # Reject unpaired Unicode surrogates anywhere.
+        canonical(value).encode("utf-8")
         return value
     except (ValueError, UnicodeError, RecursionError):
         raise ApiError(400, "INVALID_REQUEST") from None
 
-def decode_image(item):
+
+def decode_image(item, image_id):
     try:
         raw = base64.b64decode(item["dataBase64"], validate=True)
     except (ValueError, binascii.Error):
@@ -42,21 +64,24 @@ def decode_image(item):
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(BytesIO(raw), formats=["PNG"]) as picture:
+            with Image.open(BytesIO(raw), formats=["PNG", "JPEG"]) as picture:
                 width, height = picture.size
+                if {"PNG": "image/png", "JPEG": "image/jpeg"}.get(picture.format) != item["mediaType"]:
+                    raise ApiError(415, "IMAGE_INVALID")
                 if max(width, height) > 1280 or width * height > 786432:
                     raise ApiError(422, "IMAGE_LIMIT_EXCEEDED")
                 if getattr(picture, "n_frames", 1) != 1:
                     raise ApiError(415, "IMAGE_INVALID")
                 picture.verify()
-            with Image.open(BytesIO(raw), formats=["PNG"]) as picture:
+            with Image.open(BytesIO(raw), formats=["PNG", "JPEG"]) as picture:
                 picture.load()
     except ApiError:
         raise
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError, Image.DecompressionBombError,
             Image.DecompressionBombWarning):
         raise ApiError(415, "IMAGE_INVALID") from None
-    return ImageInput(item["imageId"], raw, hashlib.sha256(raw).hexdigest(), width, height)
+    return ImageInput(image_id, raw, hashlib.sha256(raw).hexdigest(), width, height, item["mediaType"])
+
 
 class RequestValidator:
     def __init__(self, directory):
@@ -67,44 +92,38 @@ class RequestValidator:
         request = strict_json(raw)
         error = next(self.validator.iter_errors(request), None)
         if error:
-            path = list(error.absolute_path)
-            if path and path[0] == "images":
-                raise ApiError(422 if error.validator in ("maxItems", "maxLength") else 415,
-                               "IMAGE_LIMIT_EXCEEDED" if error.validator in ("maxItems", "maxLength") else "IMAGE_INVALID")
-            raise ApiError(400, "INVALID_REQUEST")
-        if not request["instruction"].strip():
-            raise ApiError(400, "INVALID_REQUEST", {"field": "instruction"})
+            raise ApiError(400, "INVALID_REQUEST", {"field": ".".join(map(str, error.absolute_path))})
         request["clientRequestId"] = str(UUID(request["clientRequestId"]))
-        for key, default in (("currentCode", None), ("parentJobId", None), ("history", []), ("images", [])):
-            request.setdefault(key, default)
-        if request["parentJobId"]:
-            request["parentJobId"] = str(UUID(request["parentJobId"]))
-        if request["operation"] == "modify" and not (request["currentCode"] or "").strip():
-            raise ApiError(400, "INVALID_REQUEST", {"field": "currentCode"})
-        ctx = request["context"]
-        for key in self.schema["properties"]["context"]["properties"]:
-            ctx.setdefault(key, None)
-        fields = [(request["instruction"], 8192), (request["currentCode"], 65536),
-                  (ctx["sdkReferenceText"], 32768), (ctx["flowContextText"], 32768)]
-        history_size = sum(len(x["content"].encode("utf-8")) for x in request["history"])
-        if any(len((value or "").encode("utf-8")) > limit for value, limit in fields) or history_size > 16384:
-            raise ApiError(413, "REQUEST_TOO_LARGE")
-        text_size = sum(len((value or "").encode("utf-8")) for value, _ in fields) + history_size
-        if text_size > 131072:
-            raise ApiError(413, "REQUEST_TOO_LARGE")
-        for item in request["images"]:
-            item.setdefault("capturedAt", None)
-            item.setdefault("snapshotRevision", None)
-        if len({x["imageId"] for x in request["images"]}) != len(request["images"]):
+        identity = json.loads(canonical(request))
+        del identity["clientRequestId"]
+        images, text_bytes, meaningful = [], 0, False
+        for mi, message in enumerate(request["messages"]):
+            if "reasoning_content" in message:
+                if message["role"] != "assistant":
+                    raise ApiError(400, "INVALID_REQUEST", {"field": "messages.reasoning_content"})
+                text_bytes += len(message["reasoning_content"].encode("utf-8"))
+            has_images = any(part["type"] == "image" for part in message["content"])
+            if has_images and message["role"] != "user":
+                raise ApiError(400, "INVALID_REQUEST", {"field": "messages", "reason": "images_require_user_role"})
+            for pi, part in enumerate(message["content"]):
+                if part["type"] == "text":
+                    text_bytes += len(part["text"].encode("utf-8"))
+                    meaningful = meaningful or bool(part["text"].strip())
+                    if has_images and "[img]" in part["text"]:
+                        raise ApiError(400, "INVALID_REQUEST", {"field": "messages", "reason": "reserved_image_marker"})
+                else:
+                    if len(images) >= 4:
+                        raise ApiError(422, "IMAGE_LIMIT_EXCEEDED")
+                    decoded = decode_image(part, f"{mi}:{pi}")
+                    images.append(decoded)
+                    part["dataBase64"] = base64.b64encode(decoded.data).decode("ascii")
+                    hashed = identity["messages"][mi]["content"][pi]
+                    del hashed["dataBase64"]
+                    hashed["sha256"] = decoded.sha256
+                    meaningful = True
+        if not meaningful or not any(m["role"] == "user" for m in request["messages"]):
             raise ApiError(400, "INVALID_REQUEST")
-        images = tuple(decode_image(x) for x in request["images"])
-        # Canonicalize Base64 without changing original decoded bytes.
-        for item, decoded in zip(request["images"], images):
-            item["dataBase64"] = base64.b64encode(decoded.png).decode("ascii")
-        business = json.loads(canonical(request))
-        del business["clientRequestId"]
-        for item, decoded in zip(business["images"], images):
-            del item["dataBase64"]
-            item["sha256"] = decoded.sha256
-        fingerprint = hashlib.sha256(canonical(business).encode("utf-8")).hexdigest()
-        return request, fingerprint, TaskInput(canonical(request), images)
+        if text_bytes > MAX_TEXT_UTF8_BYTES:
+            raise ApiError(413, "REQUEST_TOO_LARGE")
+        fingerprint = hashlib.sha256(canonical(identity).encode("utf-8")).hexdigest()
+        return request, fingerprint, TaskInput(wire_json(request), tuple(images))

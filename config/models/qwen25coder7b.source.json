@@ -1,0 +1,14 @@
+{
+  "model": "qwen2.5-coder:7b-instruct-q5_K_M",
+  "manifest_sha256": "771d6745a8b66662055e5701cdde9b49c8cbeb98969181c6dd46f468b01cae69",
+  "blob_sha256": "52476f59a3cf8b77b96872a0ba56b62c528591af0068c79dde8d23394e88a315",
+  "blob_size": 5444831744,
+  "template_sha256": "1e65450c30670713aa47fe23e8b9662bdf4065e81cc8e3cbfaa98924fcc0d320",
+  "license_sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+  "tokenizer_repository": "Qwen/Qwen2.5-Coder-7B-Instruct",
+  "tokenizer_revision": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+  "tokenizer_files": {
+    "tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "tokenizer_config.json": "959e7f1d9a1b7641a6d6ce05ca97b75c7894fcb66cbe5a040406458fb1128ee4"
+  }
+}

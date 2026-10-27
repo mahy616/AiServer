@@ -1,0 +1,43 @@
+{
+  "Provider": "Ollama",
+  "ProfileId": "5080-qwen3vl4b-32k-pending-v1",
+  "EngineVersion": "0.40.9",
+  "ExecutablePath": ".local/apps/ollama/v0.40.9/ollama.exe",
+  "BaseUrl": "http://127.0.0.1:11434",
+  "ModelsPath": ".local/ollama/models",
+  "Model": "qwen3-vl:4b-instruct-q4_K_M",
+  "ExpectedQuantization": "Q4_K_M",
+  "RequiredCapabilities": [
+    "completion",
+    "vision"
+  ],
+  "ModelLockPath": "config/models/qwen3vl4b.lock.json",
+  "NumCtx": 32768,
+  "NumPredict": 4096,
+  "MaxInputTokens": 28160,
+  "ReservedTokens": 512,
+  "KeepAlive": "10m",
+  "MaxLoadedModels": 1,
+  "NumParallel": 1,
+  "EngineMaxQueue": 1,
+  "ConnectTimeoutSeconds": 5,
+  "GenerateTimeoutSeconds": 600,
+  "MaxResponseBytes": 1048576,
+  "ImagePolicy": {
+    "MaxImages": 1,
+    "MaxBytesPerImage": 3145728,
+    "MaxLongEdge": 1280,
+    "MaxPixelsPerImage": 786432,
+    "AllowedFormats": [
+      "png",
+      "jpeg"
+    ],
+    "ProcessingVersion": "pass-through-image-v1",
+    "TargetMaxImages": 4
+  },
+  "Budget": {
+    "Method": "conservative-estimate-v1",
+    "IsExact": false
+  },
+  "GenerationDefaults": {}
+}

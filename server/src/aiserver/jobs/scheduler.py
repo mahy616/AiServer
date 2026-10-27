@@ -6,13 +6,18 @@ import time
 import logging
 
 from aiserver.api.errors import ApiError
+from aiserver.api.models import model_description
+from aiserver.api.validation import request_text_bytes
 from aiserver.inference.contracts import ModelError, PreparedInput
+from aiserver.inference.diagnostics import inference_context, record
 
 class Scheduler:
-    def __init__(self, store, settings, profile, budget, provider):
+    def __init__(self, store, settings, profile, budget, provider, profiles=None):
         self.store, self.settings, self.profile = store, settings, profile
         self.budget, self.provider = budget, provider
-        self.accepted_input_types = tuple(x for x in profile.accepted_input_types if x in budget.accepted_input_types)
+        self.profiles = {model_description(p, settings)["id"]: p for p in (profiles or [profile])}
+        self.accepted_input_types = tuple(dict.fromkeys(x for p in self.profiles.values()
+                                          for x in p.accepted_input_types if x in budget.accepted_input_types))
         self.gate = asyncio.Lock()
         self.wake = asyncio.Event()
         self.state = "starting"
@@ -52,26 +57,45 @@ class Scheduler:
             return False, "INPUT_BUDGET_UNVERIFIED"
         return True, None
 
-    async def submit(self, user, request, fingerprint, task):
+    async def submit(self, user, request, fingerprint, task, received_at_ms=None):
         existing = await self.db(self.store.replay, user, request["clientRequestId"], fingerprint)
         if existing:
             return existing, True
+        profile = self.profiles.get(request["model"])
+        if profile is None:
+            raise ApiError(404, "MODEL_NOT_FOUND")
+        model = model_description(profile, self.settings)
+        if request_text_bytes(request) > model["limits"]["maxTextUtf8Bytes"]:
+            raise ApiError(413, "REQUEST_TOO_LARGE")
+        if request.get("tools"):
+            supported = (self.provider.tools_supported(profile) if hasattr(self.provider, "tools_supported")
+                         else getattr(self.provider, "supports_tools", False))
+            if not supported:
+                raise ApiError(400, "TOOLS_NOT_SUPPORTED")
+        if len(task.images) > model["limits"]["maxImages"]:
+            raise ApiError(422, "IMAGE_LIMIT_EXCEEDED")
         ready, reason = await self.can_accept()
         if not ready:
             raise ApiError(503, reason)
         needed = "image" if task.images else "text"
-        if needed not in self.accepted_input_types:
+        if needed not in profile.accepted_input_types or needed not in self.budget.accepted_input_types:
             raise ApiError(503, "INPUT_BUDGET_UNVERIFIED")
-        check = await self.budget.prepare(task, self.profile)
+        with inference_context(request_id=request["clientRequestId"], model=request["model"],
+                               logger_name="aiserver." + str(self.settings.data_directory)):
+            check = await self.budget.prepare(task, profile)
+            if check.code:
+                record("admission_rejected", code=check.code)
         if check.code:
-            raise ApiError(422 if check.code == "CONTEXT_TOO_LARGE" else 503, check.code)
+            raise ApiError(400 if check.code == "OUTPUT_LIMIT_EXCEEDED" else
+                           422 if check.code in ("CONTEXT_TOO_LARGE", "IMAGE_LIMIT_EXCEEDED") else 503,
+                           check.code, check.details)
         prepared = check.prepared
-        if prepared is None or prepared.profile_id != self.profile.profile_id:
+        if prepared is None or prepared.profile_id != profile.profile_id:
             raise ApiError(503, "SERVICE_NOT_READY")
-        effective = {"profile":asdict(self.profile), "prepared":asdict(prepared),
+        effective = {"profile":asdict(profile), "prepared":asdict(prepared),
                      "images":[{"imageId":x.image_id,"receivedSha256":x.sha256,
                                 "sentSha256":x.sha256,"width":x.width,"height":x.height,
-                                "processingVersion":"pass-through-png-v1"} for x in task.images]}
+                                "mediaType":x.media_type,"processingVersion":"pass-through-image-v1"} for x in task.images]}
         async with self.gate:
             existing = await self.db(self.store.replay,user,request["clientRequestId"],fingerprint)
             if existing:
@@ -79,13 +103,13 @@ class Scheduler:
             ready, reason = await self.can_accept()
             if not ready:
                 raise ApiError(503, reason)
-            result = await self.db(self.store.insert,user,request,fingerprint,effective,self.active_job is not None)
+            result = await self.db(self.store.insert,user,request,fingerprint,effective,self.active_job is not None,received_at_ms)
         self.wake.set()
         return result
 
-    async def cancel(self, user, job):
+    async def cancel(self, user, job, reason="user_cancel"):
         async with self.gate:
-            result = await self.db(self.store.cancel,user,job)
+            result = await self.db(self.store.cancel,user,job,reason)
         self.wake.set()
         return result
 
@@ -144,13 +168,20 @@ class Scheduler:
     async def execute(self, row):
         job = row["job_id"]
         effective = json.loads(row["effective_settings_json"])
-        if effective["profile"]["snapshot_json"] != self.profile.snapshot_json:
+        profile = next((p for p in self.profiles.values() if p.profile_id == row["profile_id"]), None)
+        if profile is None or effective["profile"]["snapshot_json"] != profile.snapshot_json:
             await self.save(self.store.finish,job,None,"MODEL_CONFIG_ERROR")
             self.state, self.active_job = "paused", None
             return
         prepared = PreparedInput(**effective["prepared"])
         stop = asyncio.Event()
-        generation = asyncio.create_task(self.provider.generate(prepared,stop))
+        async def on_delta(text, channel="content"):
+            await self.save(self.store.append_output, job, text, channel)
+        with inference_context(job_id=job, profile_id=profile.profile_id,
+                               budget_method=prepared.budget_method,
+                               admission_tokens=prepared.estimated_input_tokens,
+                               logger_name="aiserver." + str(self.settings.data_directory)):
+            generation = asyncio.create_task(self.provider.generate(prepared,stop,on_delta))
         deadline = time.monotonic()+self.settings.execution_timeout_seconds
         cleanup_needed = False
         last_queue_check = time.monotonic()
@@ -206,7 +237,7 @@ class Scheduler:
                         generation.result()
                     except BaseException:
                         pass
-                if done and self.profile.automatic_cleanup_verified:
+                if done and profile.automatic_cleanup_verified:
                     await self.db(self.store.clear_cleanup,job)
                     self.state = "available"
                 elif done and hasattr(self.provider, "recover") and await self.recover_engine(job):

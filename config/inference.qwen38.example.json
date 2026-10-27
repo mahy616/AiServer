@@ -1,0 +1,44 @@
+{
+  "Provider": "Ollama",
+  "ProfileId": "qwen38-27b-iq3-q8kv-64k-v1",
+  "EngineVersion": "0.40.9",
+  "ExecutablePath": ".local/apps/ollama/v0.40.9/ollama.exe",
+  "BaseUrl": "http://127.0.0.1:11434",
+  "ModelsPath": ".local/ollama/models",
+  "Model": "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-IQ3_XXS",
+  "ExpectedQuantization": "IQ3_XXS",
+  "RequiredCapabilities": [
+    "completion",
+    "tools",
+    "thinking"
+  ],
+  "ModelLockPath": "config/models/qwen38.local.json",
+  "FlashAttention": true,
+  "KvCacheType": "q8_0",
+  "NumBatch": 64,
+  "NumCtx": 65536,
+  "NumPredict": 16384,
+  "ReservedTokens": 512,
+  "MaxTextUtf8Bytes": 2097152,
+  "KeepAlive": "10m",
+  "MaxLoadedModels": 1,
+  "NumParallel": 1,
+  "EngineMaxQueue": 1,
+  "ConnectTimeoutSeconds": 5,
+  "GenerateTimeoutSeconds": 3600,
+  "MaxResponseBytes": 8388608,
+  "ImagePolicy": {
+    "MaxImages": 0,
+    "MaxBytesPerImage": 0,
+    "MaxLongEdge": 0,
+    "MaxPixelsPerImage": 0,
+    "AllowedFormats": [],
+    "ProcessingVersion": "text-only-v1"
+  },
+  "Budget": {
+    "Method": "conservative-estimate-v1",
+    "IsExact": false
+  },
+  "RequireFullGpu": true,
+  "GenerationDefaults": {}
+}

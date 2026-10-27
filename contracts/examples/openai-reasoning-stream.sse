@@ -1,0 +1,10 @@
+data: {"id": "chatcmpl-example", "created": 1793066400, "model": "qwen3.5:9b-q4_K_M", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-example", "created": 1793066400, "model": "qwen3.5:9b-q4_K_M", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"reasoning_content": "将两个2相加。"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-example", "created": 1793066400, "model": "qwen3.5:9b-q4_K_M", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"content": "4"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-example", "created": 1793066400, "model": "qwen3.5:9b-q4_K_M", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+
+data: [DONE]
+

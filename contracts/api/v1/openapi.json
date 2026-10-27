@@ -1,0 +1,1600 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AiServer generic inference API",
+    "version": "0.9.7"
+  },
+  "servers": [
+    {
+      "url": "https://szzj.nat200.top"
+    },
+    {
+      "url": "http://127.0.0.1:18080"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "health",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "operationId": "ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/ready"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "responses.schema.json#/$defs/ready"
+                    },
+                    {
+                      "$ref": "responses.schema.json#/$defs/errorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "operationId": "models",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/models"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "operationId": "listJobs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "beforeSequence",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/list"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "streamInference",
+        "description": "Owner SSE connection. Disconnect cancels queued/running work. Repeated identity returns 409; query instead of regenerating.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "job-request.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SSE accepted/status/delta/reasoning/completed/cancelled/failed/error; see sse-event.schema.json and README.md.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/by-request/{requestId}": {
+      "get": {
+        "operationId": "lookupJob",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/status"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{jobId}": {
+      "get": {
+        "operationId": "getJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/status"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{jobId}/result": {
+      "get": {
+        "operationId": "getResult",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/result"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{jobId}/cancel": {
+      "post": {
+        "operationId": "cancelJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "cancel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/cancel"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "cancel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/cancel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "whoAmI",
+        "responses": {
+          "200": {
+            "description": "me",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/me"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "errorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "responses.schema.json#/$defs/errorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "openaiModels",
+        "responses": {
+          "200": {
+            "description": "models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/models"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "operationId": "openaiChatCompletions",
+        "description": "Authenticated Chat Completions subset, using the existing durable queue. Tools execute in the client.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "openai-chat-request.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/completion"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "data: [DONE]\n\n"
+              }
+            },
+            "headers": {
+              "X-Job-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or context_length_exceeded. Context overflow is recoverable through client compaction; streaming errors use the same code after headers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "OUTPUT_TRUNCATED: generation exhausted its effective output budget. Partial content remains available through X-Job-Id and the native result endpoint. A stream emits an error frame after partial deltas, without successful finish or [DONE].",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "openai-responses.schema.json#/$defs/error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

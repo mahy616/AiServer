@@ -12,7 +12,7 @@ import threading
 from urllib.parse import urlsplit
 
 from aiserver.operations.lock import InstanceLock
-from aiserver.settings import ROOT
+ROOT = Path(__file__).resolve().parents[4]
 
 
 class WindowsJob:
@@ -113,6 +113,7 @@ class ManagedEngine:
         try:
             identity = process_identity(record["pid"])
         except (ProcessLookupError, FileNotFoundError):
+            self.record.unlink(missing_ok=True)
             return
         if identity != record["identity"] or Path(identity["executable"]) != self.executable:
             # Stale PID has been reused. Leave the unrelated process untouched.
@@ -137,26 +138,33 @@ class ManagedEngine:
         uri = urlsplit(self.cfg["BaseUrl"])
         with socket.socket() as probe:
             if probe.connect_ex((uri.hostname, uri.port)) == 0:
-                raise RuntimeError("Engine port is occupied by an unmanaged instance")
+                from aiserver.operations.processes import engine_port_problem
+                from aiserver.operations.diagnostics import StartupFailure
+                raise StartupFailure(engine_port_problem(uri.port,self.record))
         if not self.executable.is_file():
             raise RuntimeError("Engine executable missing")
-        environment = os.environ.copy()
-        environment.update({"OLLAMA_HOST": uri.netloc, "OLLAMA_MODELS": str((ROOT / self.cfg["ModelsPath"]).resolve()),
-                            "OLLAMA_NUM_PARALLEL": "1", "OLLAMA_MAX_LOADED_MODELS": "1", "OLLAMA_MAX_QUEUE": "1",
-                            "OLLAMA_CONTEXT_LENGTH": str(self.cfg["NumCtx"]), "OLLAMA_KEEP_ALIVE": self.cfg["KeepAlive"],
-                            "OLLAMA_NO_CLOUD": "1", "OLLAMA_DEBUG": "0"})
+        from aiserver.inference.configuration import engine_environment
+        environment = engine_environment(self.cfg, ROOT)
         self.child = subprocess.Popen([str(self.executable), "serve"], env=environment, cwd=ROOT,
                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                                      creationflags=(subprocess.CREATE_NO_WINDOW | 0x4) if os.name == "nt" else 0,
                                       start_new_session=os.name != "nt")
         if os.name == "nt":
             try:
                 self.job = WindowsJob(self.child)
+                from aiserver.operations.processes import resume_suspended
+                self.record.write_text(json.dumps({"pid": self.child.pid, "identity": process_identity(self.child.pid)}), encoding="utf-8")
+                resume_suspended(self.child)
             except BaseException:
-                self.child.terminate()
+                if self.job:
+                    self.job.close(); self.job = None
+                elif self.child.poll() is None:
+                    self.child.terminate()
                 self.child.wait(timeout=15)
+                self.record.unlink(missing_ok=True)
                 raise
-        self.record.write_text(json.dumps({"pid": self.child.pid, "identity": process_identity(self.child.pid)}), encoding="utf-8")
+        else:
+            self.record.write_text(json.dumps({"pid": self.child.pid, "identity": process_identity(self.child.pid)}), encoding="utf-8")
         self.log_directory.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(self.log_directory / "engine.log", maxBytes=5242880, backupCount=5, encoding="utf-8")
         pipe = self.child.stdout
@@ -194,7 +202,8 @@ class ManagedEngine:
 
     async def close(self):
         try:
-            await asyncio.to_thread(self._stop_recorded)
+            if self.lock:
+                await asyncio.to_thread(self._stop_recorded)
             if self.reader:
                 await asyncio.to_thread(self.reader.join, 2)
         finally:

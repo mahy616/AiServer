@@ -1,5 +1,5 @@
-# Observed installed dependency set, Python 3.12.4, 2026-10-23.
-# No package was installed/upgraded by A. Reproduction on a clean environment is unverified.
+# Baseline observed on Python 3.12.4, 2026-10-23; additions are noted below.
+# Existing-environment imports and dependency metadata checked; clean-host installation unverified.
 fastapi==0.135.1
 starlette==0.52.1
 pydantic==2.12.3
@@ -22,3 +22,18 @@ jsonschema-specifications==2025.9.1
 attrs==25.4.0
 referencing==0.37.0
 rpds-py==0.30.0
+
+# Coder tokenizer/runtime and GGUF preparation, 2026-10-26.
+tokenizers==0.22.2
+gguf==0.19.0
+numpy==2.2.6
+PyYAML==6.0.3
+requests==2.32.5
+tqdm==4.67.1
+huggingface-hub==1.23.0
+filelock==3.13.1
+fsspec==2024.6.1
+packaging==25.0
+charset-normalizer==3.4.3
+urllib3==2.5.0
+colorama==0.4.6

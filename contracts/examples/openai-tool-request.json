@@ -1,0 +1,12 @@
+{
+  "model": "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "messages": [{"role": "user", "content": "请读取 example.txt 并概括内容"}],
+  "stream": true,
+  "stream_options": {"include_usage": true},
+  "tools": [{"type": "function", "function": {
+    "name": "read_file",
+    "description": "读取客户端本地文本文件",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}
+  }}],
+  "tool_choice": "auto"
+}

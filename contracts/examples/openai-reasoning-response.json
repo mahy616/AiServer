@@ -1,0 +1,22 @@
+{
+  "id": "chatcmpl-example",
+  "object": "chat.completion",
+  "created": 1793066400,
+  "model": "qwen3.5:9b-q4_K_M",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "4",
+        "reasoning_content": "将两个2相加。"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 12,
+    "total_tokens": 22
+  }
+}

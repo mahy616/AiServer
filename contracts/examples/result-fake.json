@@ -1,30 +1,24 @@
 {
   "jobId": "196867e2-2b19-4a06-9fcf-8f34427840a1",
+  "clientRequestId": "416417b5-e936-4cde-b0df-969281936318",
+  "model": "fake-v1",
   "status": "succeeded",
   "output": {
-    "text": "// FAKE: transport fixture only; no model or compiler was run.",
-    "isComplete": true,
-    "kind": "unclassified"
-  },
-  "validation": {
-    "metadata": "not_run",
-    "compilation": "not_run",
-    "business": "not_run"
-  },
-  "source": {
-    "projectId": "demo-project",
-    "scriptId": "demo-script",
-    "snapshotRevision": "local-17",
-    "currentCodeSha256": null
+    "text": "FAKE transport fixture: example",
+    "isComplete": true
   },
   "generation": {
     "profileId": "fake-v1",
-    "promptVersion": "fake-no-model-v1",
+    "messageMappingVersion": "client-messages-v1",
     "inferenceProvider": "Fake",
     "inputTokens": null,
     "outputTokens": null,
+    "estimatedInputTokens": null,
+    "capacityMethod": "fake-bytes-only-v1",
     "finishReason": "stop"
   },
   "error": null,
-  "payloadExpiresAt": "2026-10-30T10:20:13Z"
+  "stopReason": null,
+  "inferenceStopConfirmed": null,
+  "payloadExpiresAt": "2026-10-25T02:00:01Z"
 }

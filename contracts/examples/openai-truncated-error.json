@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "OUTPUT_TRUNCATED：本次输出上限为 16384 token。模型输出达到本次上限，已截断。思考和正文共用输出预算；请提高输出上限、关闭思考或分批生成。",
+    "type": "invalid_request_error",
+    "param": "max_tokens",
+    "code": "OUTPUT_TRUNCATED"
+  }
+}

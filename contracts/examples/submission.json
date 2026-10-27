@@ -1,7 +1,5 @@
 {
   "jobId": "196867e2-2b19-4a06-9fcf-8f34427840a1",
   "clientRequestId": "416417b5-e936-4cde-b0df-969281936318",
-  "status": "queued",
-  "replayed": false,
-  "pollAfterSeconds": 3
+  "model": "fake-v1"
 }

@@ -1,9 +1,0 @@
-材料性质：固定模拟工程目录，非真实宿主快照；仅用现有 C#脚本示例.txt 中已观察到的调用方式。
-目标：.NET Framework 4.7.2，实际 C# 编译器版本未知，避免新语法。
-脚本入口：namespace NamespaceCsharpScriptEngine，public class CsharpScriptClass，public static void Execute(Guid processkey)。
-本实验模拟契约：using IMV.CoreBase; var Script = new Script_Function(processkey)。构造和调用形状来自现有示例；真实 Script_Function 的声明命名空间、程序集和签名仍待 SDK 核对，不由本模拟契约确认。
-读取输出：(double)Script.GetValue(67, "Distance")。
-读取全局变量：(double)Script.GetGlobalVarValue("gap下限")、(double)Script.GetGlobalVarValue("gap上限")。
-写回：Script.SetVarValue(2, "gap", double值)、Script.SetVarValue(2, "status", int值)、Script.SetVarValue(2, "message", string值)。
-此模拟工程节点目录按 ID 排序：2 名称 GapScript，3 名称 ResultDisplay，67 名称 GapMeasure；目录排列不代表执行顺序，执行方向由附图可见箭头表达。
-单位均为 mm。阈值由外部配置，每次读取；此任务不修改阈值或其他节点，也不操作设备。

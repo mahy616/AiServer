@@ -1,0 +1,134 @@
+"""Offline validation of shipped references and request/response/SSE examples."""
+import json
+from pathlib import Path
+import re
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "server/src"))
+from jsonschema import Draft202012Validator, FormatChecker
+from aiserver.api.validation import RequestValidator
+from aiserver.api.openai import ChatValidator
+
+
+def main():
+    api, samples = ROOT / "contracts/api/v1", ROOT / "contracts/examples"
+    responses = json.loads((api / "responses.schema.json").read_text(encoding="utf-8"))
+    for name in ("text-request", "image-request", "four-image-request"):
+        RequestValidator(api).validate((samples / (name + ".json")).read_bytes())
+    for name, definition in (("submission", "accepted"), ("status", "status"),
+                             ("result-fake", "result"), ("ready-fake", "ready"), ("error", "errorResponse"),
+                             ("me", "me")):
+        schema = dict(responses, **{"$ref": "#/$defs/" + definition})
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(
+            json.loads((samples / (name + ".json")).read_text(encoding="utf-8")))
+    schema = json.loads((api / "sse-event.schema.json").read_text(encoding="utf-8").replace(
+        "responses.schema.json#/$defs/", "#/$defs/"))
+    schema["$defs"] = responses["$defs"]
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    for filename in ("stream.sse", "reasoning-stream.sse"):
+        for block in (samples / filename).read_text(encoding="utf-8").strip().split("\n\n"):
+            lines = block.splitlines()
+            validator.validate({"event": lines[0][7:], "data": json.loads(lines[1][6:])})
+
+    # Public API examples must remain consistent with the shipped schemas.
+    guide = (api / "README.md").read_text(encoding="utf-8")
+    examples = re.findall(r"<!-- example:([\w-]+) -->\s*~~~(json|text)\n(.*?)\n~~~", guide, re.S)
+    assert len(examples) == 12, "Missing API-guide examples"
+    for name, language, content in examples:
+        if name == "sse":
+            for block in content.strip().split("\n\n"):
+                lines = block.splitlines()
+                if lines[0].startswith(":"):
+                    continue
+                validator.validate({"event": lines[0][7:], "data": json.loads(lines[1][6:])})
+        elif name == "request":
+            RequestValidator(api).validate(content.encode("utf-8"))
+        else:
+            inline_schema = dict(responses, **{"$ref": "#/$defs/" + name})
+            Draft202012Validator(inline_schema, format_checker=FormatChecker()).validate(json.loads(content))
+
+    openai = json.loads((api / "openai-responses.schema.json").read_text(encoding="utf-8"))
+    for name in ("openai-tool-request", "openai-tool-result-request", "openai-reasoning-request"):
+        ChatValidator(api).validate((samples / (name + ".json")).read_bytes())
+    Draft202012Validator(dict(openai, **{"$ref": "#/$defs/completion"})).validate(
+        json.loads((samples / "openai-tool-response.json").read_text(encoding="utf-8")))
+    Draft202012Validator(dict(openai, **{"$ref": "#/$defs/completion"})).validate(
+        json.loads((samples / "openai-reasoning-response.json").read_text(encoding="utf-8")))
+    for line in (samples / "openai-stream.sse").read_text(encoding="utf-8").splitlines():
+        if line.startswith("data: ") and line != "data: [DONE]":
+            Draft202012Validator(dict(openai, **{"$ref": "#/$defs/chunk"})).validate(json.loads(line[6:]))
+    for line in (samples / "openai-reasoning-stream.sse").read_text(encoding="utf-8").splitlines():
+        if line.startswith("data: ") and line != "data: [DONE]":
+            Draft202012Validator(dict(openai, **{"$ref": "#/$defs/chunk"})).validate(json.loads(line[6:]))
+    Draft202012Validator(dict(openai, **{"$ref": "#/$defs/error"})).validate(
+        json.loads((samples / "openai-truncated-error.json").read_text(encoding="utf-8")))
+    truncated = (samples / "openai-truncated-stream-error.sse").read_text(encoding="utf-8")
+    assert "[DONE]" not in truncated
+    for line in truncated.splitlines():
+        if line.startswith("data: "):
+            value = json.loads(line[6:])
+            Draft202012Validator(dict(openai, **{"$ref": "#/$defs/error"})).validate(value)
+            detail = json.loads(value["error"]["message"])["error"]
+            assert detail["code"] == "invalid_prompt" and detail["aiserverCode"] == "OUTPUT_TRUNCATED"
+    additional = re.findall(r"<!-- openai-example:([\w-]+) -->\s*~~~json\n(.*?)\n~~~", guide, re.S)
+    assert len(additional) == 3, "Missing OpenAI/OpenCode standalone examples"
+    for name, content in additional:
+        source = {"config": "opencode.example.json", "request": "openai-tool-request.json",
+                  "tool-result": "openai-tool-result-request.json"}[name]
+        assert json.loads(content) == json.loads((samples / source).read_text(encoding="utf-8"))
+        if name == "config":
+            models = json.loads(content)["provider"]["aiserver"]["models"]
+            for filename in ("inference.coder.example.json",):
+                cfg = json.loads((ROOT / "config" / filename).read_text(encoding="utf-8"))
+                assert models[cfg["Model"]]["limit"] == {"context": cfg["NumCtx"], "input": cfg["NumCtx"]-cfg["ReservedTokens"]-cfg["NumPredict"], "output": cfg["NumPredict"]}, \
+                    "OpenCode limits differ from " + filename
+                assert cfg["NumPredict"] + cfg["ReservedTokens"] < cfg["NumCtx"], \
+                    "Invalid context/output partition in " + filename
+        else:
+            ChatValidator(api).validate(content.encode("utf-8"))
+
+    cfg = json.loads((ROOT / "config/inference.coder14b.example.json").read_text(encoding="utf-8"))
+    sample = json.loads((samples / "opencode.coder14b.example.json").read_text(encoding="utf-8"))
+    assert sample["model"] == "aiserver/" + cfg["Model"]
+    assert sample["provider"]["aiserver"]["models"][cfg["Model"]]["limit"] == {
+        "context": cfg["NumCtx"], "input": cfg["NumCtx"]-cfg["ReservedTokens"]-cfg["NumPredict"], "output": cfg["NumPredict"]}
+    multi = json.loads((samples / "opencode.multimodel.example.json").read_text(encoding="utf-8"))
+    for filename in ("inference.coder.example.json", "inference.coder14b.example.json", "inference.qwen35.example.json",
+                     "inference.qwen38.example.json"):
+        cfg = json.loads((ROOT / "config" / filename).read_text(encoding="utf-8"))
+        assert multi["provider"]["aiserver"]["models"][cfg["Model"]]["limit"] == {
+            "context": cfg["NumCtx"], "input": cfg["NumCtx"]-cfg["ReservedTokens"]-cfg["NumPredict"], "output": cfg["NumPredict"]}
+        assert multi["provider"]["aiserver"]["models"][cfg["Model"]]["tool_call"] == ("tools" in cfg["RequiredCapabilities"])
+        entry = multi["provider"]["aiserver"]["models"][cfg["Model"]]
+        assert entry["options"] == {"think": False}
+        assert bool(entry.get("variants")) == entry["reasoning"]
+
+    error_validator = Draft202012Validator(dict(openai, **{"$ref": "#/$defs/error"}))
+    error_validator.validate(json.loads((samples / "openai-context-error.json").read_text(encoding="utf-8")))
+    for line in (samples / "openai-context-stream-error.sse").read_text(encoding="utf-8").splitlines():
+        if line.startswith("data: "):
+            value = json.loads(line[6:])
+            error_validator.validate(value)
+            envelope = json.loads(value["error"]["message"])
+            assert envelope["type"] == "error" and envelope["error"]["code"] == "context_length_exceeded"
+
+    def references(value, source):
+        if isinstance(value, dict):
+            if "$ref" in value:
+                filename, _, pointer = value["$ref"].partition("#")
+                target = json.loads((source.parent / filename if filename else source).read_text(encoding="utf-8"))
+                for segment in pointer.lstrip("/").split("/") if pointer else ():
+                    target = target[segment.replace("~1", "/").replace("~0", "~")]
+            for child in value.values():
+                references(child, source)
+        elif isinstance(value, list):
+            for child in value:
+                references(child, source)
+    for path in api.glob("*.json"):
+        references(json.loads(path.read_text(encoding="utf-8")), path)
+    print("PASS: contract references, native/OpenAI samples, 12 native + 3 OpenAI/OpenCode inline examples")
+
+
+if __name__ == "__main__":
+    main()

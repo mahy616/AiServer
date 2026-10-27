@@ -25,13 +25,9 @@ def main():
     engine = (ROOT / cfg["ExecutablePath"]).resolve()
     models = (ROOT / cfg["ModelsPath"]).resolve()
     models.mkdir(parents=True, exist_ok=True)
-    environment = os.environ.copy()
-    environment.update({"OLLAMA_HOST": uri.netloc, "OLLAMA_MODELS": str(models),
-                        "OLLAMA_CONTEXT_LENGTH": str(cfg["NumCtx"]),
-                        "OLLAMA_NUM_PARALLEL": str(cfg["NumParallel"]),
-                        "OLLAMA_MAX_LOADED_MODELS": str(cfg["MaxLoadedModels"]),
-                        "OLLAMA_MAX_QUEUE": str(cfg["EngineMaxQueue"]),
-                        "OLLAMA_KEEP_ALIVE": cfg["KeepAlive"], "OLLAMA_NO_CLOUD": "1"})
+    sys.path.insert(0, str(ROOT / "server/src"))
+    from aiserver.inference.configuration import engine_environment
+    environment = engine_environment(cfg, ROOT)
     child = subprocess.Popen([str(engine), "serve"], env=environment, cwd=ROOT)
     pid_path = ROOT / ".local/locks/engine-process.json"
     pid_path.parent.mkdir(parents=True, exist_ok=True)

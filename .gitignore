@@ -18,4 +18,11 @@ config/inference.production.json
 *.token
 *.secret
 config/*.local.json
+config/models/*.local.json
 *.local.ini
+
+# Local backups and existing tunnel launcher; never source or release inputs.
+/.local.7z
+/natapp.exe
+/run_natapp.bat
+config/*.bak

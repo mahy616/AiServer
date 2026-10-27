@@ -1,109 +1,35 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Generic inference request v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "clientRequestId",
-    "operation",
-    "instruction",
-    "context"
+    "model",
+    "messages"
   ],
   "properties": {
     "clientRequestId": {
       "type": "string",
       "format": "uuid"
     },
-    "operation": {
-      "enum": [
-        "create",
-        "modify",
-        "explain"
-      ]
-    },
-    "instruction": {
+    "model": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 8192,
-      "description": "non-whitespace; max 8192 UTF-8 bytes"
+      "maxLength": 128
     },
-    "currentCode": {
+    "think": {
+      "description": "Request opt-in: absent/null/false disables thinking; true enables only engine-verified thinking models. Unsupported models ignore this flag. Legacy GenerationDefaults.think does not enable thinking.",
+      "default": false,
       "type": [
-        "string",
+        "boolean",
         "null"
-      ],
-      "maxLength": 65536,
-      "description": "Required non-whitespace for modify; max 65536 UTF-8 bytes"
+      ]
     },
-    "context": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schemaVersion",
-        "targetFramework"
-      ],
-      "properties": {
-        "schemaVersion": {
-          "const": 1
-        },
-        "targetFramework": {
-          "const": ".NETFramework,Version=v4.7.2"
-        },
-        "projectId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 128
-        },
-        "scriptId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 128
-        },
-        "snapshotRevision": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 128
-        },
-        "csharpLanguageVersion": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 128
-        },
-        "sdkContractVersion": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 128
-        },
-        "sdkReferenceText": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 32768,
-          "description": "Maximum 32768 UTF-8 bytes"
-        },
-        "flowContextText": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 32768,
-          "description": "Maximum 32768 UTF-8 bytes"
-        }
-      }
-    },
-    "history": {
+    "messages": {
       "type": "array",
-      "maxItems": 4,
+      "minItems": 1,
+      "maxItems": 128,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -114,66 +40,69 @@
         "properties": {
           "role": {
             "enum": [
+              "system",
               "user",
               "assistant"
             ]
           },
+          "reasoning_content": {
+            "type": "string",
+            "maxLength": 2097152
+          },
           "content": {
-            "type": "string",
-            "maxLength": 16384,
-            "description": "All history combined <=16384 UTF-8 bytes"
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "type",
+                    "text"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "text"
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 2097152
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "type",
+                    "mediaType",
+                    "dataBase64"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "image"
+                    },
+                    "mediaType": {
+                      "enum": [
+                        "image/png",
+                        "image/jpeg"
+                      ]
+                    },
+                    "dataBase64": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4194304
+                    }
+                  }
+                }
+              ]
+            }
           }
         }
       }
-    },
-    "images": {
-      "type": "array",
-      "maxItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "imageId",
-          "mediaType",
-          "dataBase64"
-        ],
-        "properties": {
-          "imageId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "mediaType": {
-            "const": "image/png"
-          },
-          "dataBase64": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 4194304
-          },
-          "capturedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "snapshotRevision": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 128
-          }
-        }
-      }
-    },
-    "parentJobId": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "format": "uuid"
     }
-  }
+  },
+  "description": "Text, reasoning history and images are preserved. Optional think explicitly opts in on supported models; absent/null defaults off; generation output uses the public resource cap. All text/history/tools share byte and context limits."
 }
