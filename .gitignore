@@ -1,28 +1,92 @@
+# Local runtimes, models, downloads, reports, releases and full local backups.
 .local/
+/.local.*
 .worktrees/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-*.egg-info/
-.venv/
-bin/
-obj/
+
+# Private deployment configuration; keep public examples and model metadata.
+*.local.json
+*.local.ini
+/config/inference.development.json
+/config/inference.production.json
+/config/natapp.ini
+
+# Environment secrets; sanitized example files may be committed.
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+!.env.template
+*.token
+*.secret
+*.dpapi
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Existing local tunnel binary and launcher (may contain a tunnel token).
+/natapp.exe
+/run_natapp.bat
+
+# Runtime databases, journals and rotating logs.
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
 *.sqlite*
 *.log
-config/server.local.json
-config/inference.development.json
-config/inference.production.json
-*.token
-*.secret
-config/*.local.json
-config/models/*.local.json
-*.local.ini
+*.log.*
+*.pid
 
-# Local backups and existing tunnel launcher; never source or release inputs.
-/.local.7z
-/natapp.exe
-/run_natapp.bat
-config/*.bak
+# Python environments, packaging, caches and coverage output.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Node/OpenCode dependencies and compiled C# benchmark output.
+node_modules/
+bin/
+obj/
+
+# Model weights and compiled inference engines, even outside .local/.
+*.gguf
+*.safetensors
+pytorch_model*.bin
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.engine
+
+# Configuration backups and temporary editor files may contain private data.
+*.bak
+*.backup
+*.tmp
+*.temp
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+.idea/
+.vs/
+
+# Operating-system metadata.
+.DS_Store
+Thumbs.db
+Desktop.ini
