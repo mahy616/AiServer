@@ -2,8 +2,7 @@
 import json
 from pathlib import Path
 
-KNOWN_CONFIGS = ("config/inference.coder.local.json", "config/inference.coder14b.local.json",
-                 "config/inference.qwen35.local.json", "config/inference.qwen38.local.json")
+KNOWN_CONFIGS = ("config/inference.qwen35.local.json", "config/inference.qwen38.local.json")
 
 
 def registration(root, server, selected_path, selected):

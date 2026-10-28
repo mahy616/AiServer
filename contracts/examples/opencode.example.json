@@ -6,11 +6,12 @@
       "name": "AiServer",
       "options": {
         "baseURL": "https://szzj.nat200.top/v1",
+        "apiKey": "{env:AISERVER_API_KEY}",
         "timeout": 3600000
       },
       "models": {
-        "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k": {
-          "name": "Qwen2.5-Coder 7B Q5 / Q8 KV",
+        "qwen3.5:9b-q4_K_M": {
+          "name": "Qwen3.5 9B Q4 / Q8 KV (thinking off)",
           "tool_call": true,
           "modalities": {
             "input": [
@@ -21,19 +22,56 @@
             ]
           },
           "limit": {
-            "context": 81920,
-            "input": 73216,
-            "output": 8192
+            "context": 131072,
+            "input": 114176,
+            "output": 16384
           },
-          "reasoning": false,
+          "reasoning": true,
           "options": {
             "think": false
+          },
+          "variants": {
+            "normal": {
+              "think": false
+            },
+            "thinking": {
+              "think": true
+            }
+          }
+        },
+        "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-IQ3_XXS": {
+          "name": "Qwen3.8 27B UD-IQ3_XXS / Q8 KV",
+          "tool_call": true,
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 65536,
+            "input": 48640,
+            "output": 16384
+          },
+          "reasoning": true,
+          "options": {
+            "think": false
+          },
+          "variants": {
+            "normal": {
+              "think": false
+            },
+            "thinking": {
+              "think": true
+            }
           }
         }
       }
     }
   },
-  "model": "aiserver/aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "model": "aiserver/qwen3.5:9b-q4_K_M",
   "compaction": {
     "auto": true,
     "reserved": 10000,

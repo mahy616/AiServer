@@ -1,6 +1,6 @@
 # AiServer API与OpenCode接入
 
-原生HTTP API路径为`/api/v1`，OpenAI兼容入口为`/v1`。更新日期：2026-10-27。OpenCode接入见第10节；第2至9节记录服务端保留的原生接口与认证、任务语义。
+原生HTTP API路径为`/api/v1`，OpenAI兼容入口为`/v1`。对应服务端版本：0.9.11；更新日期：2026-10-28。OpenCode接入见第10节；第2至9节记录服务端保留的原生接口与认证、任务语义。
 
 示例地址和模型名称用于说明；实际服务地址、个人API key及模型由部署方提供。本文不承诺部署当前在线，连接时按实际响应验证。
 
@@ -8,7 +8,7 @@
 
 客户端统一使用OpenCode。OpenCode在本机组织需求、项目文件、历史和工具结果，通过AiServer的`/v1/chat/completions`访问模型；模型返回工具调用后，由本机OpenCode执行文件读取、编辑或命令，再回传结果。5080上的AiServer负责鉴权、模型能力、排队、推理、停止、结果和监控，不运行OpenCode Agent或读取客户端磁盘。
 
-本机启动、密钥设置和验证步骤维护在`docs/正式工程运维.md`。本机入口使用独立API key，自动从模型清单刷新Coder ID及容量；本文件保留通用provider配置和完整线协议样例。原生接口继续供连接检查、管理工具与服务兼容使用，不再交付独立桌面客户端或C#通信实现。
+本机启动、密钥设置和验证步骤维护在[运维文档](../../../docs/正式工程运维.md#本机opencode执行端)。本机入口使用独立API key，自动从模型清单刷新9B／27B模型ID及容量；本文件保留通用provider配置和完整线协议样例。原生接口继续供连接检查、管理工具与服务兼容使用，不再交付独立桌面客户端或C#通信实现。
 
 ## 2. 连接约定与端点总表
 
@@ -17,8 +17,8 @@
 | 参数 | 来源 | 示例 |
 |---|---|---|
 | baseUrl | 服务提供方，允许用户配置 | https://szzj.nat200.top |
-| apiKey | 5080上的AiServer管理员签发 | 绑定个人账号；不写入公开配置 |
-| model | 从GET models读取实际ID | aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k |
+| apiKey | 5080上的AiServer管理员签发 | 完整的`ais_…`个人密钥；客户端API key输入框不加`Bearer `前缀 |
+| model | 从GET models读取实际ID | qwen3.5:9b-q4_K_M |
 
 baseUrl不包含/api/v1，拼接下面路径。外网只使用HTTPS；本机回环调试可用http://127.0.0.1:18080。OpenCode原生HTTP请求不需要浏览器CORS配置。
 
@@ -42,6 +42,8 @@ baseUrl不包含/api/v1，拼接下面路径。外网只使用HTTPS；本机回�
 | GET | /api/v1/jobs/{jobId}/result | 200，读取终态结果；未结束409，已到期410 |
 | POST | /api/v1/jobs/{jobId}/cancel | 200排队／终态；202执行／取消中 |
 | GET | /api/v1/jobs?limit=20&beforeSequence=100 | 200，本人任务分页列表 |
+| GET | /v1/models | 200，OpenAI格式模型列表，同样需要API key |
+| POST | /v1/chat/completions | 200，OpenAI兼容普通JSON或SSE，见第10节 |
 
 所有接口只允许访问当前认证用户的任务。访问不存在或别人的任务统一404 JOB_NOT_FOUND。
 
@@ -50,6 +52,22 @@ baseUrl不包含/api/v1，拼接下面路径。外网只使用HTTPS；本机回�
 ### 3.1 签发与验证
 
 AiServer 0.9起只保留账号与API key，移除密码设置及`POST /api/v1/auth/login`、`POST /api/v1/auth/logout`。账号用于任务归属、配额和用量统计；OpenCode使用该账号的独立key，不提交账号密码。
+
+后续客户端统一沿用此认证方式。用户从管理员取得服务根地址和个人API key，即可接入；请求身份由key绑定的账号确定，不额外提交用户名。这里使用AiServer签发的key，不是OpenAI或NATAPP的key。两个API前缀使用同一把key，每次受保护请求都携带：
+
+~~~http
+Authorization: Bearer <完整的AiServer API key>
+~~~
+
+`Bearer`是HTTP认证方案名；客户端的API key字段只填完整密钥，由SDK添加这个前缀。自写HTTP客户端则按上面的格式设置请求头。仅传`X-API-Key`、查询参数`api_key`、JSON中的`apiKey`或账号密码均不能认证。没有登录换取令牌、自动刷新或退出登录流程；更换／撤销key由管理员处理，本机清除凭据不会撤销服务端key。
+
+| 接入位置 | 服务地址 | 密钥位置 |
+|---|---|---|
+| 本工程OpenCode启动入口 | 服务根地址，如`https://szzj.nat200.top`，不带`/v1` | 掩码设置窗口中的API key，Windows当前用户加密保存 |
+| 手工配置OpenCode | `provider.aiserver.options.baseURL`为`https://szzj.nat200.top/v1` | `options.apiKey`引用`{env:AISERVER_API_KEY}`；配置见第10.1节 |
+| 自写HTTP／OpenAI兼容SDK | 原生路径用根地址；OpenAI兼容SDK的base URL用根地址加`/v1` | HTTP请求头如上；SDK的`api_key`参数只传完整key |
+
+签发、本机设置、手工OpenCode和只读连接检查的具体步骤集中在[运维文档](../../../docs/正式工程运维.md#账号与api-key)。先用带key的`GET /api/v1/auth/me`核实账号，再读取models；health免认证成功只证明存活，不能证明key有效或模型可用。401检查密钥是否完整、账号是否启用、key是否到期／撤销；就绪失败与认证失败按各自状态处理。
 
 管理员在5080本机通过管理器或`token-create`签发key，绑定已有的启用账号。`Store.token_create`使用UUID创建keyId，再用`secrets.token_urlsafe(32)`生成256位随机秘密，组成`ais_<keyId>_<随机秘密>`。完整key仅在签发时返回；数据库`api_keys`只保存完整key的SHA256摘要、keyId、用户及创建／到期／撤销信息，无法从列表取回key明文。
 
@@ -137,7 +155,7 @@ AiServer 0.9起只保留账号与API key，移除密码设置及`POST /api/v1/au
 | roleMappings | object，当前developer映射为system，是后端兼容降级，不保证两种角色语义完全相同 |
 | outputLimitPolicy | string，reject-above-limit；显式输出预算超过maxOutputTokens时拒绝，不静默缩小 |
 | limits.maxRequestBytes | int，整次UTF-8 JSON字节上限，包含Base64；默认20MiB |
-| limits.maxTextUtf8Bytes | int，全部文字总字节上限；旧模型默认128KiB，Coder为2MiB，以models返回为准 |
+| limits.maxTextUtf8Bytes | int，全部文字总字节上限；旧模型默认128KiB，当前9B／27B为2MiB，以models返回为准 |
 | limits.maxMessages | int，最多消息条数，当前128 |
 | limits.maxImages | int，整次请求全部消息／历史合计的图片数量上限；当前部署可能为1，协议上限4 |
 | limits.imageMediaTypes | string[]，当前image/png、image/jpeg |
@@ -564,7 +582,7 @@ GET /v1/models返回OpenAI格式：{"object":"list","data":[{"id":"实际模型I
 
 0.9.2的OpenCode接入脚本将全部已发布模型及各自能力写入provider.models，支持在`/models`切换；多模型公开配置见[样例](../../examples/opencode.multimodel.example.json)。自管引擎允许模型分别保留KV精度／Flash Attention设置，差异通过串行任务间重启自管引擎生效；不会同时运行多个生成。Qwen3.5-9B当前只开放文字／工具，输入预算为保守估算，实际usage仍来自引擎。安装、运行与测试只维护在运维文档。
 
-OpenCode为唯一客户端。配置示例为80K窗口、默认输出预算下73216输入／8192输出、纯文本与工具调用。limit.input取models.limits.defaultMaxInputTokens；旧服务缺少该字段时按contextTokens减maxOutputTokens及reservedTokens（缺少时512）推导，并保留更小的maxInputTokens上限。地址、模型ID及三个limit须与实际服务能力一致：
+OpenCode为唯一客户端。配置示例为9B的128K窗口、默认输出预算下114176输入／16384输出、纯文本与工具调用。limit.input取models.limits.defaultMaxInputTokens；旧服务缺少该字段时按contextTokens减maxOutputTokens及reservedTokens（缺少时512）推导，并保留更小的maxInputTokens上限。地址、模型ID及三个limit须与实际服务能力一致：
 
 <!-- openai-example:config -->
 ~~~json
@@ -576,11 +594,12 @@ OpenCode为唯一客户端。配置示例为80K窗口、默认输出预算下732
       "name": "AiServer",
       "options": {
         "baseURL": "https://szzj.nat200.top/v1",
+        "apiKey": "{env:AISERVER_API_KEY}",
         "timeout": 3600000
       },
       "models": {
-        "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k": {
-          "name": "Qwen2.5-Coder 7B Q5 / Q8 KV",
+        "qwen3.5:9b-q4_K_M": {
+          "name": "Qwen3.5 9B Q4 / Q8 KV (thinking off)",
           "tool_call": true,
           "modalities": {
             "input": [
@@ -591,19 +610,56 @@ OpenCode为唯一客户端。配置示例为80K窗口、默认输出预算下732
             ]
           },
           "limit": {
-            "context": 81920,
-            "input": 73216,
-            "output": 8192
+            "context": 131072,
+            "input": 114176,
+            "output": 16384
           },
-          "reasoning": false,
+          "reasoning": true,
           "options": {
             "think": false
+          },
+          "variants": {
+            "normal": {
+              "think": false
+            },
+            "thinking": {
+              "think": true
+            }
+          }
+        },
+        "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-IQ3_XXS": {
+          "name": "Qwen3.8 27B UD-IQ3_XXS / Q8 KV",
+          "tool_call": true,
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 65536,
+            "input": 48640,
+            "output": 16384
+          },
+          "reasoning": true,
+          "options": {
+            "think": false
+          },
+          "variants": {
+            "normal": {
+              "think": false
+            },
+            "thinking": {
+              "think": true
+            }
           }
         }
       }
     }
   },
-  "model": "aiserver/aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "model": "aiserver/qwen3.5:9b-q4_K_M",
   "compaction": {
     "auto": true,
     "reserved": 10000,
@@ -616,13 +672,15 @@ OpenCode为唯一客户端。配置示例为80K窗口、默认输出预算下732
 }
 ~~~
 
-OpenCode中执行/connect → Other，provider id填写aiserver，输入管理员给的个人key；随后/models选模型。上例仅声明Coder。服务端须完成模型准备并开放该精确ID；旧图文模型文件保留不代表仍对外开放。自动压缩会改变后续发送的历史；原始大输入仍须完整符合输入预算。历史、工具结果及压缩由OpenCode自行管理，并计入服务端输入预算。不要选择Responses API适配器。baseURL以/v1结尾，不是/api/v1或完整/chat/completions路径。
+上例通过`provider.aiserver.options.apiKey`引用进程环境变量`AISERVER_API_KEY`，变量值为完整个人key，不带`Bearer `。本工程启动入口自动解密并注入该变量，用户无需手工配置环境变量或再执行`/connect`。自行管理OpenCode时，也可删除上例的`options.apiKey`，改用OpenCode的`/connect`凭据存储；两种设置步骤见[运维文档](../../../docs/正式工程运维.md#手工opencode接入)。
+
+上例声明9B和27B，默认选择9B。服务端须完成模型准备并开放该精确ID；旧图文模型文件保留不代表仍对外开放。自动压缩会改变后续发送的历史；原始大输入仍须完整符合输入预算。历史、工具结果及压缩由OpenCode自行管理，并计入服务端输入预算。不要选择Responses API适配器。baseURL以/v1结尾，不是/api/v1或完整/chat/completions路径。
 
 ### 10.2 请求与支持范围
 
 顶层必填model、messages；stream默认false。支持stream_options.include_usage、tools、tool_choice、parallel_tool_calls、temperature、top_p、seed、stop、presence_penalty、max_tokens或max_completion_tokens（二者不能同时给出）、n=1，以及可选user标签（不改变认证身份）。扩展字段top_k、repeat_penalty与think只接受当前锁定Ollama支持的值，think为boolean或null；所有模型默认不启用思考，只有显式think=true且引擎确认支持thinking时启用；未指定、null或false均关闭。不支持thinking的模型忽略该开关，向引擎省略think字段。未知参数明确400，不静默宣称支持。
 
-0.9.5起不再将旧私有Temperature／TopP／TopK／Seed／Think／PresencePenalty字段注入推理请求。采样参数优先级为显式请求、可选GenerationDefaults、模型／引擎默认；GenerationDefaults默认空。思考独立采用上述请求显式开启策略，旧GenerationDefaults.think及顶层Think保留兼容读取但不生效。预检与生成复用冻结的消息、工具、思考设置与输出预算。服务端不增加业务提示、不裁剪或摘要历史、不改写正文；Coder已有工具模板保持原样。
+0.9.5起不再将旧私有Temperature／TopP／TopK／Seed／Think／PresencePenalty字段注入推理请求。采样参数优先级为显式请求、可选GenerationDefaults、模型／引擎默认；GenerationDefaults默认空。思考独立采用上述请求显式开启策略，旧GenerationDefaults.think及顶层Think保留兼容读取但不生效。预检与生成复用冻结的消息、工具、思考设置与输出预算。服务端不增加业务提示、不裁剪或摘要历史、不改写正文；模型已有工具模板保持原样。
 
 max_tokens／max_completion_tokens在上限内原样执行，超过models.maxOutputTokens返回HTTP 400／OUTPUT_LIMIT_EXCEEDED，param为对应请求字段；未指定时采用公开的服务上限。NumPredict保留为旧资源限额字段名，另支持MaxOutputTokens优先覆盖。完整输入上限=contextTokens－本次有效输出预算－reservedTokens；上下文超限仍明确拒绝，保持truncate=false／shift=false。原生/api/v1可选think及assistant.reasoning_content，输出预算仍采用服务上限。
 
@@ -642,7 +700,7 @@ tool_choice支持auto、none、required或指定函数对象。none不向引擎�
 <!-- openai-example:request -->
 ~~~json
 {
-  "model": "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "model": "qwen3.5:9b-q4_K_M",
   "messages": [{"role": "user", "content": "请读取 example.txt 并概括内容"}],
   "stream": true,
   "stream_options": {"include_usage": true},
@@ -660,7 +718,7 @@ tool_choice支持auto、none、required或指定函数对象。none不向引擎�
 <!-- openai-example:tool-result -->
 ~~~json
 {
-  "model": "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "model": "qwen3.5:9b-q4_K_M",
   "messages": [
     {"role": "user", "content": "请读取 example.txt 并概括内容"},
     {"role": "assistant", "content": null, "tool_calls": [{
@@ -693,4 +751,4 @@ tool_choice支持auto、none、required或指定函数对象。none不向引擎�
 
 发送响应前的其他错误使用HTTP错误状态与{"error":{"message":"安全描述","type":"invalid_request_error等","param":null,"code":"错误码"}}；429／503可带Retry-After。认证、任务归属、错误正文脱敏和保留期限沿用原服务规则。此兼容范围不包括/v1/responses、音频、嵌入、文件、批处理和服务端工具执行。
 
-Coder的capacityMethod为ollama-render-tokenizer-v1：引擎只渲染实际聊天模板，服务端用锁定tokenizer对完整模板分词，包含系统规则、历史及工具。预算计数与引擎实际usage分别记录；保持truncate=false、shift=false，超限明确拒绝。80K窗口／8K默认输出／512预留时，默认输入上限为73216；请求1024输出时为80384，仅请求1输出时为81407。models.maxInputTokens表示后一种最大值，OpenCode仍须为实际输出和压缩留空间。纯文本模型返回maxImages=0、imageMediaTypes=[]及图片尺寸限制0。
+9B的capacityMethod为ollama-render-tokenizer-v1：引擎只渲染实际聊天模板，服务端用锁定tokenizer对完整模板分词，包含系统规则、历史及工具。预算计数与引擎实际usage分别记录；保持truncate=false、shift=false，超限明确拒绝。9B的128K窗口／16K默认输出／512预留时，默认输入上限为114176；请求1024输出时为129536，仅请求1输出时为130559。models.maxInputTokens表示后一种最大值，OpenCode仍须为实际输出和压缩留空间。纯文本模型返回maxImages=0、imageMediaTypes=[]及图片尺寸限制0。

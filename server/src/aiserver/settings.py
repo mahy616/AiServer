@@ -10,7 +10,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     environment: str = "Development"
     provider: str = "Fake"
-    inference_config: Path = ROOT / "config" / "inference.development.example.json"
+    inference_config: Path = ROOT / "config" / "inference.qwen35.example.json"
     additional_inference_configs: list[Path] = Field(default_factory=list, max_length=7)
     # Deprecated configuration key accepted for upgrades; never injected into new requests.
     system_prompt: Path | None = None

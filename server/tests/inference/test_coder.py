@@ -84,12 +84,12 @@ def test_coder_budget_counts_the_engine_rendered_prompt_and_tools(tmp_path):
     profile = Profile("test", "Ollama", "{}", ("text",))
     task = TaskInput(canonical(request), ())
     budget = PracticalBudget(cfg)
-    with patch.object(budget.counter, "count", AsyncMock(return_value=65536)):
+    with patch.object(budget.counter, "count", AsyncMock(return_value=64000)):
         decision = asyncio.run(budget.prepare(task, profile))
-        assert decision.prepared.input_tokens is None and decision.prepared.estimated_input_tokens == 65536
-    with patch.object(budget.counter, "count", AsyncMock(return_value=73216)):
+        assert decision.prepared.input_tokens is None and decision.prepared.estimated_input_tokens == 64000
+    with patch.object(budget.counter, "count", AsyncMock(return_value=114176)):
         assert asyncio.run(budget.prepare(task, profile)).prepared is not None
-    with patch.object(budget.counter, "count", AsyncMock(return_value=73217)):
+    with patch.object(budget.counter, "count", AsyncMock(return_value=114177)):
         assert asyncio.run(budget.prepare(task, profile)).code == "CONTEXT_TOO_LARGE"
     path.write_text("corrupt")
     with pytest.raises(ValueError, match="identity"):
@@ -130,23 +130,31 @@ def test_coder_delivery_is_complete_and_help_runs_from_extracted_package(tmp_pat
     result = builder.build(output=tmp_path / "delivery")
     with zipfile.ZipFile(result["zip"]) as archive:
         names = set(archive.namelist())
-        assert {"payload/Install-Qwen25Coder7B.cmd", "payload/scripts/inference/coder_support.py",
-                "payload/config/models/qwen25coder7b.source.json", "payload/config/inference.coder.example.json",
-                "payload/contracts/examples/opencode.example.json", "payload/Install-Qwen25Coder14B.cmd",
-                "payload/Test-Qwen25Coder14B.cmd", "payload/scripts/inference/Install-Qwen25Coder14B.py",
-                "payload/config/models/qwen25coder14b.source.json", "payload/config/inference.coder14b.example.json",
-                "payload/scripts/validation/Check-CoderCapacity.py", "payload/contracts/examples/opencode.coder14b.example.json"}.issubset(names)
+        assert {"payload/Use-9B27B.cmd", "payload/scripts/inference/Use-9B27B.py",
+                "payload/Install-Qwen35.cmd", "payload/Install-Qwen38.cmd",
+                "payload/config/inference.qwen35.example.json", "payload/config/inference.qwen38.example.json",
+                "payload/scripts/inference/coder_support.py", "payload/contracts/examples/opencode.example.json",
+                "payload/Test-ModelContexts128K.cmd", "payload/scripts/validation/Tune-ModelContexts.py",
+                "payload/Apply-5080ModelContexts.cmd", "payload/scripts/validation/context_capacity.py",
+                "payload/scripts/validation/gpu_capacity_sampler.py"}.issubset(names)
+        retired = json.loads(archive.read("payload/scripts/deployment/coder-retired-files.json"))
+        assert not any("payload/" + name in names for name in retired)
         assert not any(".local" in Path(n).parts or n.endswith(".gguf") or ".local.json" in n for n in names)
         archive.extractall(tmp_path / "unpacked")
     root = tmp_path / "unpacked/payload"
     answer = subprocess.run([sys.executable, str(root / "scripts/inference/Install-Qwen25Coder7B.py"), "--help"],
                             cwd=tmp_path, capture_output=True, timeout=20)
     assert answer.returncode == 0 and b"--context" in answer.stdout
-    for script in ("scripts/inference/Install-Qwen25Coder14B.py", "scripts/validation/Check-CoderCapacity.py"):
+    for script in ("scripts/inference/Use-9B27B.py", "scripts/inference/Install-Qwen38.py",
+                   "scripts/validation/Tune-ModelContexts.py", "scripts/inference/Repair-InferenceRuntime.py"):
         answer = subprocess.run([sys.executable, str(root / script), "--help"], cwd=tmp_path,
                                 capture_output=True, timeout=20)
         assert answer.returncode == 0, answer.stderr
-    for script in ("scripts/inference/Enable-CoderModels.py", "scripts/inference/Install-Qwen35.py",
+        if script.endswith("Repair-InferenceRuntime.py"):
+            assert b"--recommended-contexts" in answer.stdout
+        if script.endswith("Tune-ModelContexts.py"):
+            assert b"--context" in answer.stdout
+    for script in ("scripts/inference/Install-Qwen35.py",
                    "scripts/validation/Compare-Models.py", "scripts/client/OpenCode.py"):
         assert "payload/" + script in names
         answer = subprocess.run([sys.executable, str(root / script), "--help"], cwd=tmp_path,
@@ -222,6 +230,8 @@ def test_switch_preserves_private_fields_backup_and_failure_state(tmp_path, monk
         assert not (tmp_path / selected["config"]).exists()
     else:
         result = install.install(tmp_path, server_config=path, engine_factory=engine, **options)
+        if failure is None:
+            assert json.loads(Path(result["config"]).read_bytes())["NumCtx"] == selected_cfg["NumCtx"]
         updated = json.loads(path.read_text())
         assert updated["port"] == 18888 and updated["data_directory"] == ".local/private"
         assert updated["additional_inference_configs"] == ["config/old.json", "old8b"]

@@ -39,7 +39,7 @@ def test_xml_template_preserves_prose_calls_and_serializes_typed_objects():
         compatible_template("unexpected template")
 
 
-@pytest.mark.parametrize("failure", [None, "second_model", "save", "foreign_template"])
+@pytest.mark.parametrize("failure", [None, "second_model", "save", "foreign_template", "interrupted"])
 def test_repair_is_atomic_reuses_weights_and_preserves_private_tuning(tmp_path, monkeypatch, failure):
     module = load()
     server = tmp_path / "config/server.local.json"
@@ -65,6 +65,8 @@ def test_repair_is_atomic_reuses_weights_and_preserves_private_tuning(tmp_path, 
         cache.parent.mkdir(parents=True)
         cache.write_text(SOURCE)
         profiles[cfg["Model"]] = {"cfg": cfg, "manifest": manifest, "template": template}
+        if failure == "interrupted":
+            profiles[cfg["Model"]]["template"] = compatible_template(SOURCE)
         originals.update({path: path.read_bytes() for path in (config, manifest, lock)})
     server.write_text(json.dumps({"provider": "Ollama", "inference_config": "config/7b.json",
                                  "additional_inference_configs": ["config/14b.json"], "private_marker": "KEEP"}))
@@ -79,7 +81,8 @@ def test_repair_is_atomic_reuses_weights_and_preserves_private_tuning(tmp_path, 
                 return {"version": "0.40.9"}
             if endpoint == "/api/show":
                 return {"template": current["template"], "details": {"quantization_level": cfg["ExpectedQuantization"]},
-                        "capabilities": ["completion", "tools"], "model_info": YARN}
+                        "capabilities": ["completion", "tools"], "model_info": YARN,
+                        "modelfile": 'FROM "sha256-KEEP_WEIGHTS"\n'}
             if endpoint == "/api/create":
                 assert body["from"] == cfg["Model"] and "files" not in body
                 if failure == "second_model" and "14b" in cfg["Model"]:
@@ -95,6 +98,9 @@ def test_repair_is_atomic_reuses_weights_and_preserves_private_tuning(tmp_path, 
                     message = {"content": "I will read it.", "role": "assistant", "tool_calls": [
                         {"function": {"name": "read", "arguments": {"filePath": "tool-proof.txt"}}}]}
                 return {"done": True, "done_reason": "stop", "message": message}
+            if endpoint == "/api/generate":
+                assert body["prompt"] == "" and body["options"]["num_gpu"] == 999
+                return {"done": True}
             if endpoint == "/api/tags":
                 return {"models": [{"name": cfg["Model"], "digest": hashlib.sha256(current["manifest"].read_bytes()).hexdigest()}]}
             if endpoint == "/api/ps":
@@ -111,7 +117,7 @@ def test_repair_is_atomic_reuses_weights_and_preserves_private_tuning(tmp_path, 
                 raise OSError("synthetic save failure")
             return original_write(path, data)
         monkeypatch.setattr(module.install.support, "atomic_write", fail_once)
-    if failure:
+    if failure and failure != "interrupted":
         with pytest.raises((ValueError, OSError)):
             module.repair(tmp_path, server, engine_factory=engine)
         assert all(path.read_bytes() == raw for path, raw in originals.items())

@@ -72,6 +72,21 @@ def inventory(root=ROOT, *, include_reference=True):
     if tuple(int(x) for x in version.split(".")) >= (0, 9, 7):
         required.update(root / path for path in (
             "contracts/examples/openai-truncated-error.json", "contracts/examples/openai-truncated-stream-error.sse"))
+    if tuple(int(x) for x in version.split(".")) >= (0, 9, 9):
+        required.update(root / path for path in (
+            "Test-ModelContexts128K.cmd",
+            "Tune-ModelContexts.cmd", "scripts/validation/Tune-ModelContexts.py",
+            "scripts/validation/context_capacity.py", "scripts/validation/gpu_capacity_sampler.py"))
+    if tuple(int(x) for x in version.split(".")) >= (0, 9, 10):
+        required.add(root / "Apply-5080ModelContexts.cmd")
+    if tuple(int(x) for x in version.split(".")) >= (0, 9, 11):
+        retired = json.loads((root / "scripts/deployment/coder-retired-files.json").read_bytes())
+        required.difference_update(root / path for path in retired)
+        required.update(root / path for path in (
+            "Use-9B27B.cmd", "scripts/inference/Use-9B27B.py", "scripts/deployment/coder-retired-files.json",
+            "config/server.ollama.example.json",
+            "contracts/examples/openai-tool-request.json", "contracts/examples/openai-tool-result-request.json",
+            "contracts/examples/openai-tool-response.json", "contracts/examples/openai-stream.sse"))
     optional = [root / path for path in (
         "config/server.example.json", "config/server.ollama.example.json", "config/natapp.example.ini",
         "config/inference.5080.example.json", "config/inference.5080.8b.example.json",

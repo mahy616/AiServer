@@ -9,14 +9,13 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 ## 使用入口
 
 - 服务管理：双击根目录 `ServerManager.cmd`，选择本机Python和私有配置，加载后管理服务、账号、配置与备份；“运行监控”查看活跃账号、任务性能与硬件资源。
-- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.9.6覆盖后停服运行`Remove-DeepSeek.cmd`清理DeepSeek，步骤见[运维](docs/正式工程运维.md#096-移除deepseek与四模型评测)。
-- 切换Coder：更新并补齐依赖后运行 `Install-Qwen25Coder7B.cmd`，默认80K窗口／8K最大输出，输入按完整窗口预算校验、Q5权重＋Q8 KV；准备、128K调整与回退见[运维](docs/正式工程运维.md#切换qwen25-coder-7b07)。
-- 5080试用14B：`Install-Qwen25Coder14B.cmd`准备Q4_K_M权重／Q4 KV，校验80K窗口全GPU驻留后切换；安装、容量检查和回退见[运维](docs/正式工程运维.md#5080试用qwen25-coder-14b08)。
-- 多模型选择与9B对比：`Enable-CoderModels.cmd`注册已准备的7B／14B，`Install-Qwen35.cmd`追加官方Qwen3.5-9B，`Compare-Models.cmd`比较已准备模型；操作和测试范围见[运维](docs/正式工程运维.md#多模型选择与qwen35-9b092)。
-- 5080增加Qwen3.8：双击`Install-Qwen38.cmd`下载固定版本并全GPU预检；步骤见[运维](docs/正式工程运维.md#5080增加qwen38-27b)，已有部署的16K输出调整与思考模式见[升级说明](docs/正式工程运维.md#097-输出预算与思考模式)。
-- 已下载8B导入：双击 `Install-Qwen3VL8B.cmd`，保留原4B并自动注册 `qwen3-vl:8b`；交付与前提见[运维](docs/正式工程运维.md#一键导入已下载的-qwen3-vl8b)。
+- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.9.11覆盖后停服运行`Use-9B27B.cmd`迁移为双模型，步骤见[运维](docs/正式工程运维.md#0911-仅使用9b与27b)。
+- 5080准备模型：双击`Install-Qwen35.cmd`准备9B；双击`Install-Qwen38.cmd`下载固定版本并全GPU预检；步骤见[运维](docs/正式工程运维.md#5080增加qwen38-27b)。双模型统一16K输出与已有部署迁移见[运维](docs/正式工程运维.md#0911-仅使用9b与27b)。
+- 5080推荐窗口：`Apply-5080ModelContexts.cmd`备份设置9B 128K／27B 64K，输出统一16K；已有部署应用与回退见[运维](docs/正式工程运维.md#0911-仅使用9b与27b)。
+- 5080上下文寻优：停服后运行`Tune-ModelContexts.cmd`，按1K精度搜索双模型全GPU窗口，在95%显存峰值预算内长输入复核后备份写回；步骤与报告见[运维](docs/正式工程运维.md#5080上下文容量实测)。
+- 固定128K检查：停服后运行`Test-ModelContexts128K.cmd`，逐个实测已注册模型，通过的自动备份设置128K，失败的保留原窗口并报错；见[运维](docs/正式工程运维.md#固定128k测试并设置)。
 - 本机OpenCode：使用自己加密保存的AiServer API key，运行 `OpenCode-AiServer.cmd`，或桌面的“OpenCode - AiServer”；本机连接、密钥设置与文件工具说明见[运维](docs/正式工程运维.md#本机opencode执行端)。
-- C#脚本评测：本机运行 `scripts/validation/Benchmark-CSharp.py`，5080运行 `scripts/validation/Collect-CSharpBenchmark.py`；客户端只生成Markdown报告，服务端只采集数据，0.9.4计数资源升级、四模型普通／thinking共12题的方案和两端命令见[运维](docs/正式工程运维.md#单文件c脚本评测)。
+- C#脚本评测：本机运行 `scripts/validation/Benchmark-CSharp.py`，5080运行 `scripts/validation/Collect-CSharpBenchmark.py`；客户端只生成Markdown报告，服务端只采集数据，0.9.4计数资源升级、双模型角色计划与普通／thinking方案和两端命令见[运维](docs/正式工程运维.md#单文件c脚本评测)。
 - 服务端命令行：
 
 ```powershell
@@ -53,4 +52,4 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 | `scripts/inference/` | 锁定引擎与模型的首次准备工具，按需使用 |
 | `.local/` | 忽略的本机OpenCode、模型、凭据、运行数据与生成产物，不是源码入口 |
 
-本工程保持单服务进程、单生成位；图片数量和上下文限制从models接口读取。开发模板为单图，5080四图仍需实机验证。保守容量估算与实际token计数分别记录，超限明确拒绝。
+本工程保持单服务进程、单生成位；当前9B／27B用于文字与工具调用，上下文和输出限制从models接口读取。保守容量估算与实际token计数分别记录，超限明确拒绝。

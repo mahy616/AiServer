@@ -1,5 +1,5 @@
 {
-  "model": "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "model": "qwen3.5:9b-q4_K_M",
   "messages": [{"role": "user", "content": "请读取 example.txt 并概括内容"}],
   "stream": true,
   "stream_options": {"include_usage": true},

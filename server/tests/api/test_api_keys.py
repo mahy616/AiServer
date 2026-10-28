@@ -52,6 +52,32 @@ def test_expired_unknown_and_disabled_keys_fail_and_issuance_is_validated(tmp_pa
         assert scheduler.provider.calls == 0
 
 
+@pytest.mark.parametrize("placement", ["missing", "raw", "basic", "x-api-key", "query", "body"])
+def test_native_and_openai_require_bearer_header(tmp_path, placement):
+    with service(tmp_path, fake_delay_seconds=0) as (client, store, scheduler, other):
+        key = store.token_create("alice")
+        client.headers.pop("Authorization")
+        headers, params = {}, {}
+        body = {"model": "fake-v1", "messages": [{"role": "user", "content": "hello"}]}
+        if placement in ("raw", "basic"):
+            headers["Authorization"] = key if placement == "raw" else "Basic " + key
+        elif placement == "x-api-key":
+            headers["X-API-Key"] = key
+        elif placement == "query":
+            params["api_key"] = key
+        elif placement == "body":
+            body["apiKey"] = key
+        for path in ("/api/v1/auth/me", "/api/v1/models", "/v1/models"):
+            assert client.get(path, headers=headers, params=params).status_code == 401
+        assert client.post("/v1/chat/completions", headers=headers, params=params, json=body).status_code == 401
+        assert scheduler.provider.calls == 0
+        assert client.get("/api/v1/health").status_code == 200
+        assert client.get("/api/v1/auth/me", headers=bearer(key)).json()["user"]["userId"] == "alice"
+        assert client.get("/v1/models", headers=bearer(key)).status_code == 200
+        assert client.post("/v1/chat/completions", headers=bearer(key), json={
+            "model": "fake-v1", "messages": [{"role": "user", "content": "hello"}]}).status_code == 200
+
+
 def test_disable_cancels_work_and_enable_does_not_resume(tmp_path):
     with service(tmp_path, fake_delay_seconds=10) as (client, store, scheduler, other):
         first = post(client, request()); client.portal.call(scheduler.provider.started.wait)

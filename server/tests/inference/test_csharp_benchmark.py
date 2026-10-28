@@ -351,14 +351,13 @@ def test_real_opencode_stops_at_first_service_error(tmp_path, kind):
 
 
 def test_default_role_plan_and_old_deepseek_run_cannot_resume(tmp_path, monkeypatch):
-    output = tmp_path / "qwen4"
+    output = tmp_path / "qwen2"
     monkeypatch.setattr(sys, "argv", ["Benchmark-CSharp.py", "--prepare-only", "--output", str(output)])
     assert runner.main() == 0
     state = json.loads((output / ".state.json").read_bytes())
-    assert set(state["models"]) == {"7b", "14b", "9b", "qwen38", "9b-thinking", "qwen38-thinking"}
-    assert len(set(state["models"].values())) == 4 and len(state["tasks"]) == 20
+    assert set(state["models"]) == {"9b", "qwen38", "9b-thinking", "qwen38-thinking"}
+    assert len(set(state["models"].values())) == 2 and len(state["tasks"]) == 16
     assert state["profile"] == "roles" and state["thinking_selection"] == "fallback"
-    assert {t["case"].split("-")[0] for t in state["tasks"] if t["model"] == "7b"} == {"easy"}
     assert {t["case"].split("-")[0] for t in state["tasks"] if t["model"] == "9b"} == {"easy", "medium"}
     assert {t["case"].split("-")[0] for t in state["tasks"] if t["model"] == "qwen38"} == {"medium", "hard"}
     state["models"]["retired-model"] = "retired-model"

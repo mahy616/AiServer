@@ -77,7 +77,7 @@ def inspect_config(root, path):
     }
     return {"fields":fields, "sha256":hashlib.sha256(original).hexdigest(),
             "summary":{"port":value.get("port", 18080), "dataDirectory":str(data_directory(root,value)),
-                       "inferenceConfig":value.get("inference_config", "config/inference.development.example.json"),
+                       "inferenceConfig":value.get("inference_config", "config/inference.qwen35.example.json"),
                        "allowedHosts":value.get("allowed_hosts", [])}}
 
 

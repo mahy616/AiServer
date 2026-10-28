@@ -1,6 +1,6 @@
 {
   "Provider": "Ollama",
-  "ProfileId": "qwen25coder7b-q5-q8kv-80k-v1",
+  "ProfileId": "qwen25coder7b-q5-q8kv-128k-v1",
   "EngineVersion": "0.40.9",
   "ExecutablePath": ".local/apps/ollama/v0.40.9/ollama.exe",
   "BaseUrl": "http://127.0.0.1:11434",
@@ -15,8 +15,8 @@
   "FlashAttention": true,
   "KvCacheType": "q8_0",
   "NumBatch": 512,
-  "NumCtx": 81920,
-  "NumPredict": 8192,
+  "NumCtx": 131072,
+  "NumPredict": 16384,
   "ReservedTokens": 512,
   "MaxTextUtf8Bytes": 2097152,
   "KeepAlive": "10m",

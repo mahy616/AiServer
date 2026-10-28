@@ -25,7 +25,7 @@ def test_real_opencode_generated_text_agent_omits_tools(tmp_path, monkeypatch):
     if not support.BINARY.is_file():
         pytest.skip("Requires installed OpenCode")
     model = "fixture-text-model"
-    cfg = json.loads((ROOT / "config/inference.coder.example.json").read_bytes())
+    cfg = json.loads((ROOT / "config/inference.qwen35.example.json").read_bytes())
     cfg.update(Model=model, RequiredCapabilities=["completion"])
     profile = Profile("synthetic-text", "Fake", json.dumps({"config": cfg}), ("text",), True)
     provider = FakeProvider(0)
@@ -60,7 +60,8 @@ def test_real_opencode_generated_text_agent_omits_tools(tmp_path, monkeypatch):
         config["agent"].update(title={"disable": True}, summary={"disable": True})
         support.CONFIG.write_bytes(support.json_bytes(config))
         assert config["default_agent"] == support.text_agent_name(model)
-        assert config["provider"]["aiserver"]["models"][model]["limit"]["input"] == 73216
+        assert config["provider"]["aiserver"]["models"][model]["limit"]["input"] == \
+            result["/api/v1/models"]["models"][0]["limits"]["defaultMaxInputTokens"]
         env = {k: v for k, v in os.environ.items() if not k.startswith(("OPENCODE_", "AISERVER_"))}
         env.update(OPENCODE_CONFIG=str(support.CONFIG), AISERVER_API_KEY=key,
                    OPENCODE_DISABLE_AUTOUPDATE="true", OPENCODE_DISABLE_MODELS_FETCH="true",

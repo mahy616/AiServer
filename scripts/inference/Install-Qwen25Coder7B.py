@@ -140,7 +140,7 @@ def prepared_blob(root, source, work, primary, source_lock):
     return blob, provenance
 
 
-def install(root=ROOT, *, server_config=None, source_gguf=None, context=81920,
+def install(root=ROOT, *, server_config=None, source_gguf=None, context=None,
             prepare_only=False, engine_factory=legacy.temporary_engine, variant="7b",
             batch_size=None, kv_cache=None):
     root = Path(root).resolve()
@@ -155,6 +155,9 @@ def install(root=ROOT, *, server_config=None, source_gguf=None, context=81920,
     if primary["EngineVersion"] != "0.40.9":
         raise ValueError("本工具锁定Ollama 0.40.9，不自动更换引擎版本。")
     cfg = read(root / selected["template"])
+    requested_context = context
+    if context is None:
+        context = cfg["NumCtx"]
     for key in legacy.provision.PROCESS_KEYS:
         cfg[key] = primary[key]
     if context not in (49152, 81920, 131072):
@@ -179,7 +182,7 @@ def install(root=ROOT, *, server_config=None, source_gguf=None, context=81920,
         if existing["Model"] != model or not identity_path.exists():
             raise ValueError("已有Coder文件不完整或属于不同模型，请先检查。")
         cfg = existing
-        if context != 81920 and cfg["NumCtx"] != context:
+        if requested_context is not None and cfg["NumCtx"] != requested_context:
             raise ValueError("已有Coder容量不同，请按运维说明修改现有配置，不自动覆盖调优。")
         if ((batch_size is not None and cfg["NumBatch"] != batch_size)
                 or (kv_cache is not None and cfg["KvCacheType"] != kv_cache)):
@@ -279,7 +282,7 @@ def main(variant="7b"):
     parser = argparse.ArgumentParser(description=f"Prepare and switch pinned Qwen2.5-Coder {variant.upper()} with YaRN.")
     parser.add_argument("--server-config", type=Path)
     parser.add_argument("--source-gguf", type=Path)
-    parser.add_argument("--context", type=int, choices=(49152, 81920, 131072), default=81920)
+    parser.add_argument("--context", type=int, choices=(49152, 81920, 131072), help="首次准备默认读取对应模型模板；重复执行保留已有窗口")
     parser.add_argument("--batch-size", type=int, help="Initial preparation only; preserve existing tuning")
     parser.add_argument("--kv-cache", choices=("q4_0", "q8_0"), help="Initial preparation only; preserve existing tuning")
     parser.add_argument("--prepare-only", action="store_true")

@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 from uuid import uuid4
 
@@ -108,22 +109,45 @@ def repair(root=ROOT, server_config=None, *, variants=("7b", "14b"), engine_fact
                         raise ValueError("实际引擎版本不同。")
                     show = fetch("/api/show", {"model": cfg["Model"]})
                     current = next((m for m in fetch("/api/tags").get("models", []) if m.get("name") == cfg["Model"]), None)
-                    if not current or current.get("digest") != lock.get("model", {}).get("digest"):
-                        raise ValueError("实际模型摘要与身份锁不同。")
-                    if hashlib.sha256(show.get("template", "").encode()).hexdigest() != lock["template_sha256"]:
-                        raise ValueError("实际模板与身份锁不同。")
+                    actual_template = hashlib.sha256(show.get("template", "").encode()).hexdigest()
+                    if not current:
+                        raise ValueError("实际模型不存在。")
+                    interrupted_after_create = actual_template == digest
+                    if actual_template == old_digest:
+                        if current.get("digest") != lock.get("model", {}).get("digest"):
+                            origin = re.search(r"(?m)^FROM\s+(.+?)\s*$", show.get("modelfile", ""))
+                            expected_blob = lock.get("provenance", {}).get("derived_sha256")
+                            if (not origin or not expected_blob
+                                    or Path(origin.group(1).strip().strip('"')).name != "sha256-" + expected_blob):
+                                raise ValueError("实际模型摘要或权重来源与身份锁不同。")
+                    elif not interrupted_after_create:
+                        raise ValueError("实际模板与身份锁和当前修复版本都不符。")
                     touched.append(lock_path)
-                    created = fetch("/api/create", {"model": cfg["Model"], "from": cfg["Model"],
-                                                    "template": template, "stream": False})
-                    if created.get("status") != "success":
-                        raise ValueError("Ollama模板更新未成功。")
+                    if interrupted_after_create:
+                        print(variant + "：发现上次已写入XML模板但身份锁未提交，继续完成GPU核对和身份锁更新。", flush=True)
+                    else:
+                        created = fetch("/api/create", {"model": cfg["Model"], "from": cfg["Model"],
+                                                        "template": template, "stream": False})
+                        if created.get("status") != "success":
+                            raise ValueError("Ollama模板更新未成功。")
                     show = fetch("/api/show", {"model": cfg["Model"]})
                     if (hashlib.sha256(show.get("template", "").encode()).hexdigest() != digest
                             or show.get("details", {}).get("quantization_level") != cfg["ExpectedQuantization"]
                             or not set(cfg["RequiredCapabilities"]).issubset(show.get("capabilities", []))
                             or any(show.get("model_info", {}).get(k) != v for k, v in lock.get("yarn", {}).items())):
                         raise ValueError("更新后模型身份、模板或YaRN元数据不符。")
+                    origin = re.search(r"(?m)^FROM\s+(.+?)\s*$", show.get("modelfile", ""))
+                    expected_blob = lock.get("provenance", {}).get("derived_sha256")
+                    if (not origin or not expected_blob
+                            or Path(origin.group(1).strip().strip('"')).name != "sha256-" + expected_blob):
+                        raise ValueError("更新后权重来源与身份锁不符。")
                     if cfg.get("RequireFullGpu"):
+                        loaded = fetch("/api/generate", {"model": cfg["Model"], "prompt": "", "stream": False,
+                                                        "truncate": False, "shift": False,
+                                                        "keep_alive": cfg["KeepAlive"],
+                                                        "options": runtime_options(cfg)})
+                        if loaded.get("done") is not True or loaded.get("error"):
+                            raise ValueError("FULL_GPU_REQUIRED")
                         require_gpu_status(cfg, fetch("/api/ps"))
                     # The model may choose to inspect a workspace with glob
                     # before read, so generation quality is not a safe

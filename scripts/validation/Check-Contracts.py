@@ -3,16 +3,25 @@ import json
 from pathlib import Path
 import re
 import sys
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "server/src"))
 from jsonschema import Draft202012Validator, FormatChecker
+from aiserver import __version__
 from aiserver.api.validation import RequestValidator
 from aiserver.api.openai import ChatValidator
 
 
 def main():
     api, samples = ROOT / "contracts/api/v1", ROOT / "contracts/examples"
+    contract = json.loads((api / "openapi.json").read_text(encoding="utf-8"))
+    version = tomllib.loads((ROOT / "server/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    assert __version__ == version, "Python package version differs from the server release"
+    assert contract["info"]["version"] == version, "OpenAPI version differs from the server release"
+    assert contract["security"] == [{"bearerAuth": []}]
+    assert contract["components"]["securitySchemes"]["bearerAuth"]["scheme"] == "bearer"
+    assert not {"/api/v1/auth/login", "/api/v1/auth/logout"} & contract["paths"].keys()
     responses = json.loads((api / "responses.schema.json").read_text(encoding="utf-8"))
     for name in ("text-request", "image-request", "four-image-request"):
         RequestValidator(api).validate((samples / (name + ".json")).read_bytes())
@@ -79,7 +88,7 @@ def main():
         assert json.loads(content) == json.loads((samples / source).read_text(encoding="utf-8"))
         if name == "config":
             models = json.loads(content)["provider"]["aiserver"]["models"]
-            for filename in ("inference.coder.example.json",):
+            for filename in ("inference.qwen35.example.json", "inference.qwen38.example.json"):
                 cfg = json.loads((ROOT / "config" / filename).read_text(encoding="utf-8"))
                 assert models[cfg["Model"]]["limit"] == {"context": cfg["NumCtx"], "input": cfg["NumCtx"]-cfg["ReservedTokens"]-cfg["NumPredict"], "output": cfg["NumPredict"]}, \
                     "OpenCode limits differ from " + filename
@@ -88,14 +97,13 @@ def main():
         else:
             ChatValidator(api).validate(content.encode("utf-8"))
 
-    cfg = json.loads((ROOT / "config/inference.coder14b.example.json").read_text(encoding="utf-8"))
-    sample = json.loads((samples / "opencode.coder14b.example.json").read_text(encoding="utf-8"))
-    assert sample["model"] == "aiserver/" + cfg["Model"]
-    assert sample["provider"]["aiserver"]["models"][cfg["Model"]]["limit"] == {
-        "context": cfg["NumCtx"], "input": cfg["NumCtx"]-cfg["ReservedTokens"]-cfg["NumPredict"], "output": cfg["NumPredict"]}
+
     multi = json.loads((samples / "opencode.multimodel.example.json").read_text(encoding="utf-8"))
-    for filename in ("inference.coder.example.json", "inference.coder14b.example.json", "inference.qwen35.example.json",
-                     "inference.qwen38.example.json"):
+    for filename in ("opencode.example.json", "opencode.multimodel.example.json"):
+        options = json.loads((samples / filename).read_text(encoding="utf-8"))["provider"]["aiserver"]["options"]
+        assert options["apiKey"] == "{env:AISERVER_API_KEY}", "Public config must reference the personal API key"
+        assert options["baseURL"].endswith("/v1")
+    for filename in ("inference.qwen35.example.json", "inference.qwen38.example.json"):
         cfg = json.loads((ROOT / "config" / filename).read_text(encoding="utf-8"))
         assert multi["provider"]["aiserver"]["models"][cfg["Model"]]["limit"] == {
             "context": cfg["NumCtx"], "input": cfg["NumCtx"]-cfg["ReservedTokens"]-cfg["NumPredict"], "output": cfg["NumPredict"]}

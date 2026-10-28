@@ -2,7 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AiServer generic inference API",
-    "version": "0.9.7"
+    "version": "0.9.11",
+    "description": "API key authentication only. Administrators issue personal AiServer API keys locally; password login, logout and token refresh endpoints are not provided."
   },
   "servers": [
     {
@@ -1593,7 +1594,9 @@
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "bearer",
+        "bearerFormat": "AiServer API key",
+        "description": "Send Authorization: Bearer <complete ais_... API key> on every protected request. SDK api_key fields take the raw key without the Bearer prefix. X-API-Key, query parameters and request bodies are not authentication methods."
       }
     }
   }

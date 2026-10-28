@@ -11,7 +11,7 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "scripts/client"), str(Path(__file__).parent)]
 from opencode_support import BINARY, saved_key, probe
-from csharp_benchmark.common import MODELS, utc, write_json
+from csharp_benchmark.common import ACTIVE_MODELS, MODELS, utc, write_json
 from csharp_benchmark.relay import Recorder, wait_ready
 
 spec = importlib.util.spec_from_file_location("tools_benchmark_client", Path(__file__).with_name("Benchmark-CSharp.py"))
@@ -71,7 +71,7 @@ def verify(directory, binary, info, record, *, thinking="both", normal_timeout=1
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--models", nargs="+", choices=tuple(MODELS), default=["9b", "qwen38"])
+    parser.add_argument("--models", nargs="+", choices=ACTIVE_MODELS, default=list(ACTIVE_MODELS))
     parser.add_argument("--thinking", choices=("off", "on", "both"), default="both")
     parser.add_argument("--normal-timeout", type=int, default=180)
     parser.add_argument("--thinking-timeout", type=int, default=600)

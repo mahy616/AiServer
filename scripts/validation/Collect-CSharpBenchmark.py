@@ -44,7 +44,7 @@ def configuration(path):
               "port": server.get("port", 18080), "provider": server.get("provider"),
               "execution_timeout_seconds": server.get("execution_timeout_seconds", 600),
               "manage_engine": server.get("manage_engine", True), "models": []}
-    for item in [server.get("inference_config", "config/inference.development.example.json"),
+    for item in [server.get("inference_config", "config/inference.coder.example.json"),
                  *server.get("additional_inference_configs", [])]:
         cfg = json.loads(resolve(item).read_text(encoding="utf-8-sig"))
         result["models"].append({**{k: cfg[k] for k in INFERENCE_FIELDS if k in cfg},

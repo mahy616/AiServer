@@ -1,0 +1,16 @@
+[
+  "Install-Qwen25Coder7B.cmd",
+  "Install-Qwen25Coder14B.cmd",
+  "Test-Qwen25Coder14B.cmd",
+  "Enable-CoderModels.cmd",
+  "scripts/inference/Install-Qwen25Coder14B.py",
+  "scripts/inference/Enable-CoderModels.py",
+  "scripts/inference/Repair-CoderTools.py",
+  "scripts/validation/Smoke-Coder.py",
+  "scripts/validation/Check-CoderCapacity.py",
+  "config/inference.coder.example.json",
+  "config/inference.coder14b.example.json",
+  "config/models/qwen25coder7b.source.json",
+  "config/models/qwen25coder14b.source.json",
+  "contracts/examples/opencode.coder14b.example.json"
+]

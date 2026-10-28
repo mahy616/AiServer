@@ -5,6 +5,7 @@ import importlib.util
 import json
 import logging
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -222,3 +223,123 @@ def test_qwen38_output_upgrade_preserves_window_and_handles_priority_override(tm
         with pytest.raises(ValueError):
             module.set_qwen38_context(None, tmp_path, server, output=invalid)
     assert json.loads(target.read_bytes()) == expected
+
+
+@pytest.fixture
+def model_output_migration(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("models_output_upgrade_test", ROOT/"scripts/inference/Repair-InferenceRuntime.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    (tmp_path/"config").mkdir()
+    paths = []
+    for name in ("qwen35", "qwen38"):
+        template = f"config/inference.{name}.example.json"
+        (tmp_path/template).write_bytes((ROOT/template).read_bytes())
+        cfg = json.loads((ROOT/template).read_bytes())
+        cfg.update(NumPredict=8192,
+                   private_marker="KEEP", GenerationDefaults={"temperature": 0.3})
+        if name == "qwen35":
+            cfg["MaxOutputTokens"] = 4096
+        path = tmp_path/f"config/{name}.json"
+        path.write_text(json.dumps(cfg))
+        paths.append(path)
+    retired = tmp_path/"config/vl.json"
+    retired.write_bytes((ROOT/"config/inference.development.example.json").read_bytes())
+    paths.append(retired)
+    server = tmp_path/"config/server.local.json"
+    server.write_text(json.dumps({"provider": "Ollama", "inference_config": "config/qwen35.json",
+        "additional_inference_configs": [p.relative_to(tmp_path).as_posix() for p in paths[1:]],
+        "private_marker": "KEEP"}))
+    monkeypatch.setattr(module.legacy, "offline", lambda *args: nullcontext())
+    monkeypatch.setattr(module, "prepare_tokenizer", lambda *args: pytest.fail("output change must not download tokenizer"))
+    return module, server, paths
+
+
+@pytest.mark.parametrize("qwen38_output", [4096, 16384])
+def test_all_model_outputs_preserve_windows_retired_models_and_private_fields(model_output_migration, qwen38_output):
+    module, server, paths = model_output_migration
+    qwen38 = json.loads(paths[1].read_bytes())
+    paths[1].write_text(json.dumps({**qwen38, "NumPredict": qwen38_output}))
+    originals = {p: p.read_bytes() for p in [server, *paths]}
+    changed = module.set_model_outputs(16384, server.parent.parent, server)
+    assert len(changed) == (2 if qwen38_output != 16384 else 1)
+    for path in paths[:2]:
+        before = json.loads(originals[path])
+        assert json.loads(path.read_bytes()) == {**before, "NumPredict": 16384,
+            **({"MaxOutputTokens": 16384} if "MaxOutputTokens" in before else {})}
+    assert paths[-1].read_bytes() == originals[paths[-1]] and server.read_bytes() == originals[server]
+    for item in changed:
+        assert Path(item["backup"]).read_bytes() == originals[Path(item["config"])]
+    assert module.set_model_outputs(16384, server.parent.parent, server) == []
+
+
+@pytest.mark.parametrize("invalid", [True, 0, -1, 81920])
+def test_all_model_output_validation_happens_before_any_write(model_output_migration, invalid):
+    module, server, paths = model_output_migration
+    originals = {p: p.read_bytes() for p in [server, *paths]}
+    with pytest.raises(ValueError):
+        module.set_model_outputs(invalid, server.parent.parent, server)
+    assert all(p.read_bytes() == raw for p, raw in originals.items())
+    assert not list(server.parent.glob("*.bak"))
+
+
+@pytest.mark.parametrize("failure", ["save", "concurrent"])
+@pytest.mark.parametrize("recommended", [False, True])
+def test_all_model_output_failure_rolls_back_own_writes_preserving_other_updates(model_output_migration, monkeypatch, failure, recommended):
+    module, server, paths = model_output_migration
+    originals = {p: p.read_bytes() for p in [server, *paths]}
+    write = module.legacy.support.atomic_write
+    if failure == "save":
+        def fail_second(path, data):
+            if path == paths[1]:
+                raise OSError("synthetic write failure")
+            write(path, data)
+        monkeypatch.setattr(module.legacy.support, "atomic_write", fail_second)
+    else:
+        unchanged = module.legacy.unchanged
+        calls = 0
+        def concurrent(expected):
+            nonlocal calls
+            calls += 1
+            if calls == 3:
+                paths[1].write_text(json.dumps({**json.loads(originals[paths[1]]), "private_marker": "OTHER SESSION"}))
+            unchanged(expected)
+        monkeypatch.setattr(module.legacy, "unchanged", concurrent)
+    with pytest.raises((ValueError, OSError)):
+        module.set_model_outputs(16384, server.parent.parent, server, recommended_contexts=recommended)
+    for path, raw in originals.items():
+        if failure == "concurrent" and path == paths[1]:
+            assert json.loads(path.read_bytes())["private_marker"] == "OTHER SESSION"
+        else:
+            assert path.read_bytes() == raw
+
+
+def test_recommended_contexts_update_registered_models_and_preserve_other_fields(model_output_migration):
+    module, server, paths = model_output_migration
+    for path in paths[:2]:
+        value = json.loads(path.read_bytes())
+        value.update(NumCtx=32768, NumPredict=8192, MaxInputTokens=12345)
+        path.write_text(json.dumps(value))
+    originals = {path: path.read_bytes() for path in [server, *paths]}
+    changes = module.set_model_outputs(16384, server.parent.parent, server, recommended_contexts=True)
+    assert len(changes) == 2
+    for path, context in zip(paths[:2], [131072, 65536]):
+        before = json.loads(originals[path])
+        expected = {**before, "NumCtx": context, "NumPredict": 16384,
+                    **({"MaxOutputTokens": 16384} if "MaxOutputTokens" in before else {})}
+        assert json.loads(path.read_bytes()) == expected
+    assert paths[-1].read_bytes() == originals[paths[-1]] and server.read_bytes() == originals[server]
+    for item in changes:
+        assert ".before-recommended-" in item["backup"]
+        assert Path(item["backup"]).read_bytes() == originals[Path(item["config"])]
+    assert module.set_model_outputs(16384, server.parent.parent, server, recommended_contexts=True) == []
+
+
+def test_recommended_contexts_cli_needs_no_download_or_engine(model_output_migration, monkeypatch):
+    module, server, _ = model_output_migration
+    monkeypatch.setattr(module.install.shared, "ensure_dependencies", lambda **kwargs: pytest.fail("must not install dependencies"))
+    def apply(output, **kwargs):
+        assert output == 16384 and kwargs == {"server_config": server, "recommended_contexts": True}
+    monkeypatch.setattr(module, "set_model_outputs", apply)
+    monkeypatch.setattr(sys, "argv", ["Repair-InferenceRuntime.py", "--server-config", str(server), "--recommended-contexts"])
+    assert module.main() == 0

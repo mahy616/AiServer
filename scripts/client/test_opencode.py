@@ -138,7 +138,7 @@ def test_reasoning_is_opt_in_with_variants_only_for_capable_models(monkeypatch, 
 
 
 @pytest.mark.parametrize("template,expected", [
-    ("coder", 73216), ("coder14b", 73216), ("qwen35", 73216),
+    ("coder", 114176), ("coder14b", 65024), ("qwen35", 114176),
     ("qwen38", 48640), ("5080", 28160), ("5080.8b", 28160),
 ])
 def test_each_model_reserves_default_output_even_with_older_server(template, expected):

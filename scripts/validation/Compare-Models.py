@@ -20,8 +20,7 @@ spec = importlib.util.spec_from_file_location("comparison_shared", ROOT / "scrip
 legacy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(legacy)
 
-CONFIGS = {"7b": "config/inference.coder.local.json", "14b": "config/inference.coder14b.local.json",
-           "qwen35": "config/inference.qwen35.local.json"}
+CONFIGS = {"qwen35": "config/inference.qwen35.local.json", "qwen38": "config/inference.qwen38.local.json"}
 CODE_PROMPT = '''Return only Python code defining merge_intervals(intervals).
 Input is a list of (start, end) integer tuples, with start <= end. Return a sorted
 list of tuples merging overlapping or touching intervals. Do not mutate the input.

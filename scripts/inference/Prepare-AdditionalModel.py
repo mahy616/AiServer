@@ -36,20 +36,23 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class LocalOllama:
-    def __init__(self, base_url):
+    def __init__(self, base_url, *, generate_timeout=600):
         uri = urlsplit(base_url)
         if (uri.scheme != "http" or uri.hostname != "127.0.0.1"
                 or uri.username or uri.password or uri.query or uri.fragment
                 or uri.path not in ("", "/")):
             raise ValueError("BaseUrl must be loopback HTTP at 127.0.0.1")
         self.base_url = base_url.rstrip("/")
+        if type(generate_timeout) not in (int, float) or not 0 < generate_timeout <= 86400:
+            raise ValueError("Invalid local generation timeout")
+        self.generate_timeout = generate_timeout
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
     def __call__(self, endpoint, body=None):
         data = None if body is None else json.dumps(body).encode("utf-8")
         request = Request(self.base_url + endpoint, data=data,
                           headers={"Content-Type": "application/json", "Accept": "application/json"})
-        with self.opener.open(request, timeout=600 if endpoint in ("/api/create", "/api/generate", "/api/chat") else 15) as response:
+        with self.opener.open(request, timeout=self.generate_timeout if endpoint in ("/api/create", "/api/generate", "/api/chat") else 15) as response:
             raw = response.read(MAX_METADATA_BYTES + 1)
         if len(raw) > MAX_METADATA_BYTES:
             raise ValueError("Ollama metadata exceeded the size limit")

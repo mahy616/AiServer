@@ -12,7 +12,7 @@ import time
 from uuid import uuid4
 
 from csharp_benchmark.cases import analysis_result, make_cases
-from csharp_benchmark.common import (MODELS, ROOT, TIMEOUTS, THINKING_TIMEOUTS, ROLE_LEVELS, VERSION,
+from csharp_benchmark.common import (ACTIVE_MODELS, MODELS, ROOT, TIMEOUTS, THINKING_TIMEOUTS, ROLE_LEVELS, VERSION,
                                      condition_plan, read_events, run_process, sha, utc, write_json)
 from csharp_benchmark.harness import check_sdk, evaluate
 from csharp_benchmark.probes import exercise
@@ -242,8 +242,8 @@ def main():
     parser.add_argument("--resume", type=Path, help="继续未开始的题目；已开始题目不重跑")
     parser.add_argument("--report-only", type=Path, help="离线重建客户端Markdown")
     parser.add_argument("--prepare-only", action="store_true", help="只生成题目和待运行Markdown，不读取key或访问服务")
-    parser.add_argument("--models", nargs="+", choices=tuple(MODELS), default=list(MODELS))
-    parser.add_argument("--profile", choices=("roles", "calibration"), help="默认roles：7B/14B简单，9B简单/中等，27B中等/困难；calibration默认只做简单校准")
+    parser.add_argument("--models", nargs="+", choices=ACTIVE_MODELS, default=list(ACTIVE_MODELS))
+    parser.add_argument("--profile", choices=("roles", "calibration"), help="默认roles：9B简单/中等，27B中等/困难；calibration默认只做简单校准")
     parser.add_argument("--thinking", choices=("off", "on", "both", "fallback"),
                         help="默认fallback：普通模式未解决才独立重试thinking；both做全部双模式对照")
     parser.add_argument("--levels", nargs="+", choices=tuple(TIMEOUTS), help="显式覆盖计划中各模型的难度范围")

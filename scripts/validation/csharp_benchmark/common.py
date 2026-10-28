@@ -23,6 +23,7 @@ TIMEOUTS = {"easy": 180, "medium": 600, "hard": 1800}
 THINKING_TIMEOUTS = {"easy": 600, "medium": 1800, "hard": 3600}
 ROLE_LEVELS = {"7b": ("easy",), "14b": ("easy",), "9b": ("easy", "medium"), "qwen38": ("medium", "hard")}
 THINKING_MODELS = frozenset(("9b", "qwen38"))
+ACTIVE_MODELS = ("9b", "qwen38")  # Older aliases remain readable for archived reports.
 
 
 def condition_plan(aliases, thinking):

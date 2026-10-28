@@ -1,7 +1,7 @@
 {
   "id": "chatcmpl-416417b5-e936-4cde-b0df-969281936318",
   "created": 1792800000,
-  "model": "aiserver-qwen25-coder:7b-instruct-q5_k_m-yarn128k",
+  "model": "qwen3.5:9b-q4_K_M",
   "object": "chat.completion",
   "choices": [
     {

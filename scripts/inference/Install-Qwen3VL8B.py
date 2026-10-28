@@ -244,7 +244,7 @@ def temporary_engine(root, primary, work):
     try:
         os.environ["OLLAMA_NOPRUNE"] = "1"
         asyncio.run(engine.start())
-        yield provision.LocalOllama(cfg["BaseUrl"])
+        yield provision.LocalOllama(cfg["BaseUrl"], generate_timeout=cfg.get("GenerateTimeoutSeconds", 600))
     finally:
         try:
             asyncio.run(engine.close())

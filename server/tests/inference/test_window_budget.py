@@ -22,10 +22,13 @@ def config():
     return cfg
 
 
-@pytest.mark.parametrize("requested,limit,effective", [(None, 73216, 8192), (1024, 80384, 1024),
+@pytest.mark.parametrize("requested,limit,effective", [(None, 65024, 16384), (1024, 80384, 1024),
                                                        (1, 81407, 1)])
-def test_admission_uses_this_requests_effective_output_and_freezes_it(requested, limit, effective):
+@pytest.mark.parametrize("context", [81920, 131072])
+def test_admission_uses_this_requests_effective_output_and_freezes_it(requested, limit, effective, context):
     cfg = config()
+    cfg["NumCtx"] = context
+    limit += context - 81920
     request = {"protocol": "openai-chat-v1", "messages": [{"role": "user", "content": [
         {"type": "text", "text": "source code"}]}], "options": {} if requested is None else {"num_predict": requested}}
     task = TaskInput(canonical(request), ())
@@ -42,7 +45,7 @@ def test_admission_uses_this_requests_effective_output_and_freezes_it(requested,
     budget.counter.count.return_value = limit + 1
     rejected = asyncio.run(budget.prepare(task, profile))
     assert rejected.code == "CONTEXT_TOO_LARGE"
-    assert rejected.details == {"contextTokens": 81920, "outputTokens": effective,
+    assert rejected.details == {"contextTokens": context, "outputTokens": effective,
                                 "reservedTokens": 512, "inputLimitTokens": limit, "inputTokens": limit + 1}
 
 
@@ -59,7 +62,7 @@ def test_legacy_private_profile_does_not_keep_64k_cap_or_allow_cpu_offload(tmp_p
     assert loaded["RequireFullGpu"] is True
     assert json.loads(profile.snapshot_json)["config"]["RequireFullGpu"] is True
     limits = model_description(profile, Settings())["limits"]
-    assert (limits["maxInputTokens"], limits["defaultMaxInputTokens"], limits["reservedTokens"]) == (81407, 73216, 512)
+    assert (limits["maxInputTokens"], limits["defaultMaxInputTokens"], limits["reservedTokens"]) == (81407, 65024, 512)
     assert limits["inputBudgetPolicy"] == POLICY
     assert json.loads(path.read_text())["MaxInputTokens"] == 65536  # No private-file rewrite.
 
