@@ -65,6 +65,13 @@ class Scheduler:
         if profile is None:
             raise ApiError(404, "MODEL_NOT_FOUND")
         model = model_description(profile, self.settings)
+        from aiserver.inference.thinking import resolve_thinking, ThinkingParameterError
+        thinking_supported = (self.provider.thinking_supported(profile)
+            if hasattr(self.provider, "thinking_supported") else getattr(self.provider, "supports_thinking", False))
+        try:
+            resolve_thinking(json.loads(profile.snapshot_json).get("config", {}), request.get("think"), thinking_supported)
+        except ThinkingParameterError as error:
+            raise ApiError(400, "UNSUPPORTED_PARAMETER", {"field": "think", "reason": str(error)}) from None
         if request_text_bytes(request) > model["limits"]["maxTextUtf8Bytes"]:
             raise ApiError(413, "REQUEST_TOO_LARGE")
         if request.get("tools"):

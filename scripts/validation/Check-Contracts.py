@@ -42,6 +42,7 @@ def main():
 
     # Public API examples must remain consistent with the shipped schemas.
     guide = (api / "README.md").read_text(encoding="utf-8")
+    assert (api / "接口文档.md").read_text(encoding="utf-8") == guide, "Client delivery guide differs from the canonical API guide"
     examples = re.findall(r"<!-- example:([\w-]+) -->\s*~~~(json|text)\n(.*?)\n~~~", guide, re.S)
     assert len(examples) == 12, "Missing API-guide examples"
     for name, language, content in examples:
@@ -58,7 +59,7 @@ def main():
             Draft202012Validator(inline_schema, format_checker=FormatChecker()).validate(json.loads(content))
 
     openai = json.loads((api / "openai-responses.schema.json").read_text(encoding="utf-8"))
-    for name in ("openai-tool-request", "openai-tool-result-request", "openai-reasoning-request"):
+    for name in ("openai-tool-request", "openai-tool-result-request", "openai-reasoning-request", "openai-gptoss-request"):
         ChatValidator(api).validate((samples / (name + ".json")).read_bytes())
     Draft202012Validator(dict(openai, **{"$ref": "#/$defs/completion"})).validate(
         json.loads((samples / "openai-tool-response.json").read_text(encoding="utf-8")))
@@ -113,6 +114,14 @@ def main():
         assert bool(entry.get("variants")) == entry["reasoning"]
 
     error_validator = Draft202012Validator(dict(openai, **{"$ref": "#/$defs/error"}))
+    for key in ("gptoss", "gemma12", "gemma26"):
+        cfg = json.loads((ROOT / f"config/inference.{key}.example.json").read_bytes())
+        entry = multi['provider']['aiserver']['models'][cfg['Model']]
+        assert entry['limit'] == {'context': cfg['NumCtx'], 'input': cfg['NumCtx']-cfg['ReservedTokens']-cfg['NumPredict'], 'output': cfg['NumPredict']}
+        levels = cfg.get('ThinkingLevels')
+        assert entry['options'] == {'think': cfg['DefaultThinkingLevel'] if levels else False}
+        assert entry['variants'] == ({x: {'think': x} for x in levels} if levels else {'normal': {'think': False}, 'thinking': {'think': True}})
+        assert entry['tool_call'] and entry['reasoning'] and entry['modalities']['input'] == ['text']
     error_validator.validate(json.loads((samples / "openai-context-error.json").read_text(encoding="utf-8")))
     for line in (samples / "openai-context-stream-error.sse").read_text(encoding="utf-8").splitlines():
         if line.startswith("data: "):

@@ -78,7 +78,7 @@ def inventory(root=ROOT, *, include_reference=True):
             "Tune-ModelContexts.cmd", "scripts/validation/Tune-ModelContexts.py",
             "scripts/validation/context_capacity.py", "scripts/validation/gpu_capacity_sampler.py"))
     if tuple(int(x) for x in version.split(".")) >= (0, 9, 10):
-        required.add(root / "Apply-5080ModelContexts.cmd")
+        required.update(root / name for name in ("Apply-5080ModelContexts.cmd", "Set-Qwen38-80K.cmd"))
     if tuple(int(x) for x in version.split(".")) >= (0, 9, 11):
         retired = json.loads((root / "scripts/deployment/coder-retired-files.json").read_bytes())
         required.difference_update(root / path for path in retired)
@@ -87,6 +87,14 @@ def inventory(root=ROOT, *, include_reference=True):
             "config/server.ollama.example.json",
             "contracts/examples/openai-tool-request.json", "contracts/examples/openai-tool-result-request.json",
             "contracts/examples/openai-tool-response.json", "contracts/examples/openai-stream.sse"))
+    if tuple(int(x) for x in version.split(".")) >= (0, 9, 12):
+        required.update(root / path for path in (
+            "Install-ExtraModels.cmd", "Install-GptOss20B.cmd", "Install-Gemma4-12B.cmd", "Install-Gemma4-26B.cmd",
+            "scripts/inference/Install-ExtraModels.py", "scripts/inference/Install-ExtraModels.ps1",
+            "contracts/examples/openai-gptoss-request.json"))
+        required.update(root / f"config/{folder}{key}.{suffix}.json"
+                        for key in ("gptoss", "gemma12", "gemma26")
+                        for folder, suffix in (("inference.", "example"), ("models/", "source")))
     optional = [root / path for path in (
         "config/server.example.json", "config/server.ollama.example.json", "config/natapp.example.ini",
         "config/inference.5080.example.json", "config/inference.5080.8b.example.json",

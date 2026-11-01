@@ -31,6 +31,8 @@ def usage(requests):
 
 def thinking_label(state, alias):
     condition = state.get("conditions", {}).get(alias)
+    if condition and isinstance(condition["thinking"], str):
+        return "思考等级 " + condition["thinking"]
     return ("thinking" if condition["thinking"] else "普通") if condition else "历史模式未标记"
 
 

@@ -176,7 +176,8 @@ class Recorder:
         facts, sent_headers, response = StreamFacts(), False, None
         decoder = codecs.getincrementaldecoder("utf-8")("replace")
         try:
-            if self.expected_thinking is not None and body.get("think") is not self.expected_thinking:
+            if self.expected_thinking is not None and (body.get("think") != self.expected_thinking
+                    or type(body.get("think")) is not type(self.expected_thinking)):
                 facts.error = {"code": "BENCHMARK_THINKING_MISMATCH",
                                "message": "OpenCode请求的think与本题预定模式不同，已停止，未发送到模型。"}
                 row["http_status"] = 400

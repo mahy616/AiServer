@@ -164,7 +164,8 @@ def test_budget_upgrade_idempotent_preserves_tuning(tmp_path, monkeypatch):
     assert server.read_bytes() == original_server and module.repair(tmp_path, server) == []
 
 
-def test_qwen38_context_upgrade_preserves_private_fields_and_uses_no_engine(tmp_path, monkeypatch):
+@pytest.mark.parametrize("context", [65536, 81920])
+def test_qwen38_context_upgrade_preserves_private_fields_and_uses_no_engine(tmp_path, monkeypatch, context):
     spec = importlib.util.spec_from_file_location("context_upgrade_test", ROOT/"scripts/inference/Repair-InferenceRuntime.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -180,11 +181,11 @@ def test_qwen38_context_upgrade_preserves_private_fields_and_uses_no_engine(tmp_
     original_server = server.read_bytes()
     monkeypatch.setattr(module.legacy, "offline", lambda *args: nullcontext())
     monkeypatch.setattr(module, "prepare_tokenizer", lambda *args: pytest.fail("context change must not download tokenizer"))
-    changed = module.set_qwen38_context(65536, tmp_path, server)
+    changed = module.set_qwen38_context(context, tmp_path, server)
     assert Path(changed[0]["backup"]).read_bytes() == raw
-    assert json.loads(target.read_bytes()) == {**cfg, "NumCtx": 65536}
+    assert json.loads(target.read_bytes()) == {**cfg, "NumCtx": context}
     assert server.read_bytes() == original_server
-    assert module.set_qwen38_context(65536, tmp_path, server) == []
+    assert module.set_qwen38_context(context, tmp_path, server) == []
     for invalid in (True, 1024, 10**9):
         with pytest.raises(ValueError):
             module.set_qwen38_context(invalid, tmp_path, server)
@@ -219,7 +220,7 @@ def test_qwen38_output_upgrade_preserves_window_and_handles_priority_override(tm
     assert json.loads(target.read_bytes()) == expected
     assert Path(changed[0]["backup"]).read_bytes() == raw and server.read_bytes() == original_server
     assert module.set_qwen38_context(None, tmp_path, server, output=16384) == []
-    for invalid in (True, 0, -1, 65536):
+    for invalid in (True, 0, -1, cfg["NumCtx"]):
         with pytest.raises(ValueError):
             module.set_qwen38_context(None, tmp_path, server, output=invalid)
     assert json.loads(target.read_bytes()) == expected
@@ -323,7 +324,7 @@ def test_recommended_contexts_update_registered_models_and_preserve_other_fields
     originals = {path: path.read_bytes() for path in [server, *paths]}
     changes = module.set_model_outputs(16384, server.parent.parent, server, recommended_contexts=True)
     assert len(changes) == 2
-    for path, context in zip(paths[:2], [131072, 65536]):
+    for path, context in zip(paths[:2], [131072, 81920]):
         before = json.loads(originals[path])
         expected = {**before, "NumCtx": context, "NumPredict": 16384,
                     **({"MaxOutputTokens": 16384} if "MaxOutputTokens" in before else {})}

@@ -15,7 +15,7 @@ class PreparedPrompt:
     options_json: str = "{}"
     tool_choice: str = "auto"
     parallel_tool_calls: bool = True
-    think: bool | None = None
+    think: bool | str | None = None
     think_provided: bool = False
 
     def material_sha256(self):

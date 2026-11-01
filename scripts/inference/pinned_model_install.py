@@ -18,6 +18,8 @@ spec.loader.exec_module(dependencies)
 legacy = dependencies.legacy
 from coder_support import download, digest
 
+MODEL_KEYS = ("qwen38", "gptoss", "gemma12", "gemma26")
+
 
 def log(message):
     print(message, flush=True)
@@ -41,6 +43,11 @@ def manifest_info(source):
         items[sha] = item["size"]
     if sum(item.get("mediaType") == "application/vnd.ollama.image.model" for item in value["layers"]) != 1:
         raise ValueError("公开模型清单必须包含一个模型权重。")
+    for sha, data in source.get("inline_blobs", {}).items():
+        if (not isinstance(data, str) or sha not in {"sha256:" + key for key in items}
+                or "sha256:" + hashlib.sha256(data.encode("utf-8")).hexdigest() != sha
+                or len(data.encode("utf-8")) != items[sha[7:]]):
+            raise ValueError("内嵌模型元数据的SHA256／大小不符。")
     return raw, items
 
 
@@ -85,6 +92,8 @@ def download_model(root, cfg, source, source_models=None, *, allow_download=True
                     temporary.unlink(missing_ok=True)
         if destination.exists():
             legacy.verify_blob(destination, size)
+        elif "sha256:" + sha in source.get("inline_blobs", {}):
+            legacy.publish(destination, source["inline_blobs"]["sha256:" + sha].encode("utf-8"))
         elif allow_download:
             partial = destination.with_suffix(".download")
             if not partial.resolve().is_relative_to(target):
@@ -103,13 +112,15 @@ def download_model(root, cfg, source, source_models=None, *, allow_download=True
 
 
 def install(key, root=ROOT, *, server_config=None, context=None, batch_size=None,
+            output_tokens=None,
             source_models=None, prepare_only=False, allow_download=True,
             engine_factory=legacy.temporary_engine):
-    if key != "qwen38":
+    if key not in MODEL_KEYS:
         raise ValueError("未知安装目标。")
     from aiserver.inference.configuration import PROCESS_KEYS, runtime_options, validate_options
     from aiserver.context.window_budget import validate_window
     from aiserver.inference.gpu import require_gpu_status
+    from aiserver.inference.thinking import verify_thinking
 
     root = Path(root).resolve()
     source_path = root / f"config/models/{key}.source.json"
@@ -138,18 +149,22 @@ def install(key, root=ROOT, *, server_config=None, context=None, batch_size=None
     if config_path.exists():
         cfg = legacy.read(config_path)
         if ((context is not None and cfg["NumCtx"] != context)
-                or (batch_size is not None and cfg["NumBatch"] != batch_size)):
+                or (batch_size is not None and cfg["NumBatch"] != batch_size)
+                or (output_tokens is not None and cfg.get("MaxOutputTokens", cfg.get("NumPredict")) != output_tokens)):
             raise ValueError("已有配置调优不同；请停服修改实际推理JSON，不自动覆盖。")
     else:
         if context is not None:
             cfg["NumCtx"] = context
         if batch_size is not None:
             cfg["NumBatch"] = batch_size
+        if output_tokens is not None:
+            cfg["NumPredict"] = output_tokens
         cfg["ProfileId"] = f"{key}-{cfg['NumCtx']}-v1"
     identity_path = legacy.resolve(root, cfg["ModelLockPath"])
     if (cfg["Model"] != source["model"] or cfg["ExpectedQuantization"] != source["quantization"]
             or cfg["RequiredCapabilities"] != template["RequiredCapabilities"]
             or cfg["ModelLockPath"] != template["ModelLockPath"]
+            or cfg.get("ThinkingLevels") != template.get("ThinkingLevels")
             or cfg.get("RequireFullGpu") is not True or cfg["ImagePolicy"] != template["ImagePolicy"]):
         raise ValueError("模型配置的身份、能力、图片策略或全GPU要求与固定来源不符。")
     if not 8192 <= cfg["NumCtx"] <= source["native_context"]:
@@ -217,7 +232,9 @@ def install(key, root=ROOT, *, server_config=None, context=None, batch_size=None
                         or not set(source["required_capabilities"]).issubset(show.get("capabilities", []))
                         or not isinstance(show.get("template"), str) or not show["template"]):
                     raise ValueError("模型的实际摘要、架构、量化、模板或能力不符；保留原服务配置。")
+                verify_thinking(cfg, show)
                 loaded = fetch("/api/generate", {"model": cfg["Model"], "prompt": "", "stream": False,
+                    "truncate": False, "shift": False,
                     "keep_alive": cfg["KeepAlive"], "options": runtime_options(cfg)})
                 if loaded.get("done") is not True or loaded.get("error"):
                     raise ValueError("完整窗口加载失败；保留原服务配置。")
@@ -263,10 +280,11 @@ def main(default_models=("qwen38",)):
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--server-config", type=Path)
-    parser.add_argument("--models", nargs="+", choices=("qwen38",), default=default_models)
+    parser.add_argument("--models", nargs="+", choices=MODEL_KEYS, default=default_models)
     parser.add_argument("--source-models", type=Path, help="复用此Ollama模型库中匹配固定摘要的blob")
     parser.add_argument("--context", type=int, help="首次配置窗口；已有调优须停服修改实际JSON")
     parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--output-tokens", type=int, help="首次配置最大输出；思考与正文共用此预算")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--no-download", action="store_true")
     parser.add_argument("--install-dependencies", action="store_true")
@@ -278,6 +296,7 @@ def main(default_models=("qwen38",)):
         for key in dict.fromkeys(args.models):
             try:
                 install(key, server_config=args.server_config, context=args.context, batch_size=args.batch_size,
+                        output_tokens=args.output_tokens,
                         source_models=args.source_models, prepare_only=args.prepare_only, allow_download=not args.no_download)
             except Exception as error:
                 failures.append(key)

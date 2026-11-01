@@ -54,7 +54,8 @@ def run_task(binary, dotnet, case, directory, info, relay, timeout, env_factory,
         previous = session
         item = phase_fn(binary, directory, env, info["id"], prompt, name, remaining, session,
                         stop_event=relay.terminal_error, agent="build" if native else "benchmark-text",
-                        variant=("thinking" if result["thinking"] else "normal") if info.get("thinking") else None)
+                        variant=(result["thinking"] if isinstance(result["thinking"], str) else
+                                 "thinking" if result["thinking"] else "normal") if info.get("thinking") else None)
         result["phases"].append(item)
         session = item.get("session_id") or session
         result["session_id"] = session

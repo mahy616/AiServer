@@ -151,6 +151,7 @@ Authorization: Bearer <完整的AiServer API key>
 | toolCall | boolean，0.9.3起返回引擎已确认的原生工具调用能力；false时客户端不得发送tools。旧服务缺少此字段时按不支持处理 |
 | generationParameters | string，request-or-model-default；OpenAI兼容入口可显式传生成参数，未指定时使用模型／引擎默认，资源上限独立生效 |
 | thinking | boolean，引擎确认的thinking能力；OpenCode接入脚本映射为reasoning，缺少时为false |
+| thinkingLevels／defaultThinkingLevel／thinkingCanDisable | 可选，命名等级模型的可选值、默认值及是否允许关闭；GPT-OSS发布low／medium／high，详见10.2 |
 | outputChannels | string[]，传输可保留content、reasoning_content、tool_calls，不代表每个模型都会生成所有通道 |
 | roleMappings | object，当前developer映射为system，是后端兼容降级，不保证两种角色语义完全相同 |
 | outputLimitPolicy | string，reject-above-limit；显式输出预算超过maxOutputTokens时拒绝，不静默缩小 |
@@ -639,8 +640,8 @@ OpenCode为唯一客户端。配置示例为9B的128K窗口、默认输出预算
             ]
           },
           "limit": {
-            "context": 65536,
-            "input": 48640,
+            "context": 81920,
+            "input": 65024,
             "output": 16384
           },
           "reasoning": true,
@@ -678,11 +679,15 @@ OpenCode为唯一客户端。配置示例为9B的128K窗口、默认输出预算
 
 ### 10.2 请求与支持范围
 
-顶层必填model、messages；stream默认false。支持stream_options.include_usage、tools、tool_choice、parallel_tool_calls、temperature、top_p、seed、stop、presence_penalty、max_tokens或max_completion_tokens（二者不能同时给出）、n=1，以及可选user标签（不改变认证身份）。扩展字段top_k、repeat_penalty与think只接受当前锁定Ollama支持的值，think为boolean或null；所有模型默认不启用思考，只有显式think=true且引擎确认支持thinking时启用；未指定、null或false均关闭。不支持thinking的模型忽略该开关，向引擎省略think字段。未知参数明确400，不静默宣称支持。
+顶层必填model、messages；stream默认false。支持stream_options.include_usage、tools、tool_choice、parallel_tool_calls、temperature、top_p、seed、stop、presence_penalty、max_tokens或max_completion_tokens（二者不能同时给出）、n=1，以及可选user标签（不改变认证身份）。扩展字段top_k、repeat_penalty与think只接受当前锁定Ollama支持的值。未知参数明确400，不静默宣称支持。
 
-0.9.5起不再将旧私有Temperature／TopP／TopK／Seed／Think／PresencePenalty字段注入推理请求。采样参数优先级为显式请求、可选GenerationDefaults、模型／引擎默认；GenerationDefaults默认空。思考独立采用上述请求显式开启策略，旧GenerationDefaults.think及顶层Think保留兼容读取但不生效。预检与生成复用冻结的消息、工具、思考设置与输出预算。服务端不增加业务提示、不裁剪或摘要历史、不改写正文；模型已有工具模板保持原样。
+0.9.12起按模型区分思考控制。`/api/v1/models`的`thinking`仍表示引擎确认的能力；只有命名等级模型额外返回`thinkingLevels`、`defaultThinkingLevel`和`thinkingCanDisable`。Qwen及Gemma沿用布尔开关：未指定、null或false关闭，true开启；无思考能力模型忽略布尔开关，向引擎省略think。GPT-OSS发布`["low","medium","high"]`、默认medium及`thinkingCanDisable=false`：think未指定、null或true使用medium，字符串选择对应等级，false返回HTTP 400／UNSUPPORTED_PARAMETER，不把low冒充关闭。字符串等级发给未发布该等级的模型也返回400，发生在入队和生成前。
 
-max_tokens／max_completion_tokens在上限内原样执行，超过models.maxOutputTokens返回HTTP 400／OUTPUT_LIMIT_EXCEEDED，param为对应请求字段；未指定时采用公开的服务上限。NumPredict保留为旧资源限额字段名，另支持MaxOutputTokens优先覆盖。完整输入上限=contextTokens－本次有效输出预算－reservedTokens；上下文超限仍明确拒绝，保持truncate=false／shift=false。原生/api/v1可选think及assistant.reasoning_content，输出预算仍采用服务上限。
+兼容接口还接受`reasoning_effort=low|medium|high|null`作为命名think别名；与非null的think同时给出时必须同值，否则400／INVALID_REQUEST。原生`/api/v1/jobs`使用同样的think布尔／等级语义，不增加reasoning_effort别名。例见`contracts/examples/openai-gptoss-request.json`。命名等级来自目标引擎`/api/show`确认；旧模型配置、旧客户端及布尔请求行为保持兼容，GPT-OSS使用新版OpenCode接入脚本生成low／medium／high variants。公开五模型配置见`contracts/examples/opencode.multimodel.example.json`，只列实际注册并验证的模型；不自动安装示例中的模型。
+
+0.9.5起不再将旧私有Temperature／TopP／TopK／Seed／Think／PresencePenalty字段注入推理请求。采样参数优先级为显式请求、可选GenerationDefaults、模型／引擎默认；GenerationDefaults默认空。思考独立采用上述模型控制策略，旧GenerationDefaults.think及顶层Think保留兼容读取但不生效；命名模型配置使用ThinkingLevels和DefaultThinkingLevel。预检与生成复用冻结的消息、工具、思考设置与输出预算。服务端不增加业务提示、不裁剪或摘要历史、不改写正文；模型模板由锁定安装资源管理。
+
+max_tokens／max_completion_tokens在上限内原样执行，超过models.maxOutputTokens返回HTTP 400／OUTPUT_LIMIT_EXCEEDED，param为对应请求字段；未指定时采用公开的服务上限。NumPredict保留为旧资源限额字段名，另支持MaxOutputTokens优先覆盖。完整输入上限=contextTokens－本次有效输出预算－reservedTokens；上下文超限仍明确拒绝，保持truncate=false／shift=false。原生/api/v1可选think及assistant.reasoning_content，输出预算仍采用服务上限。各模型可以有不同输出上限，客户端必须从models读取，不把Qwen的16K套给新模型。
 
 messages支持system、developer（按公开roleMappings映射为system）、user、assistant和tool。content可为字符串或有序text／image_url片段；assistant带tool_calls或reasoning_content时可为null。assistant.reasoning_content原样映射为Ollama的thinking字段；计入文字和上下文预算。messages.name及image_url.detail=low／high当前无法忠实映射，返回400／UNSUPPORTED_PARAMETER；detail缺省或auto可用。image_url仅接受data:image/png;base64,...或data:image/jpeg;base64,...，图片只放user；不抓取远程URL、不重压缩图片。全部文字、工具定义、历史工具参数与思考合计受maxTextUtf8Bytes限制，协议最大2MiB，最多128条消息／128个工具。消息和工具属性顺序保留，幂等哈希使用的规范化序列化不用于重排发送材料。
 

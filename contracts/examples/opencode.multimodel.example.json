@@ -51,11 +51,101 @@
             ]
           },
           "limit": {
-            "context": 65536,
-            "input": 48640,
+            "context": 81920,
+            "input": 65024,
             "output": 16384
           },
           "reasoning": true,
+          "options": {
+            "think": false
+          },
+          "variants": {
+            "normal": {
+              "think": false
+            },
+            "thinking": {
+              "think": true
+            }
+          }
+        },
+        "gpt-oss:20b": {
+          "name": "gpt-oss:20b",
+          "tool_call": true,
+          "reasoning": true,
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 16384,
+            "input": 11776,
+            "output": 4096
+          },
+          "options": {
+            "think": "medium"
+          },
+          "variants": {
+            "low": {
+              "think": "low"
+            },
+            "medium": {
+              "think": "medium"
+            },
+            "high": {
+              "think": "high"
+            }
+          }
+        },
+        "gemma4:12b-it-q4_K_M": {
+          "name": "gemma4:12b-it-q4_K_M",
+          "tool_call": true,
+          "reasoning": true,
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 16384,
+            "input": 11776,
+            "output": 4096
+          },
+          "options": {
+            "think": false
+          },
+          "variants": {
+            "normal": {
+              "think": false
+            },
+            "thinking": {
+              "think": true
+            }
+          }
+        },
+        "aiserver-gemma4:26b-a4b-it-q3_k_m": {
+          "name": "aiserver-gemma4:26b-a4b-it-q3_k_m",
+          "tool_call": true,
+          "reasoning": true,
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 16384,
+            "input": 11776,
+            "output": 4096
+          },
           "options": {
             "think": false
           },

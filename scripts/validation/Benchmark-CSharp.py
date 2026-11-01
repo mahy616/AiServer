@@ -12,7 +12,7 @@ import time
 from uuid import uuid4
 
 from csharp_benchmark.cases import analysis_result, make_cases
-from csharp_benchmark.common import (ACTIVE_MODELS, MODELS, ROOT, TIMEOUTS, THINKING_TIMEOUTS, ROLE_LEVELS, VERSION,
+from csharp_benchmark.common import (ACTIVE_MODELS, DEFAULT_MODELS, MODELS, ROOT, TIMEOUTS, THINKING_TIMEOUTS, ROLE_LEVELS, VERSION,
                                      condition_plan, read_events, run_process, sha, utc, write_json)
 from csharp_benchmark.harness import check_sdk, evaluate
 from csharp_benchmark.probes import exercise
@@ -20,7 +20,7 @@ from csharp_benchmark.relay import Recorder, wait_ready
 from csharp_benchmark.report import render
 
 sys.path.insert(0, str(ROOT / "scripts/client"))
-from opencode_support import model_limits
+from opencode_support import model_limits, thinking_variants
 
 
 def suite_hash():
@@ -73,7 +73,7 @@ def fallback_source(state, task):
     if state.get("thinking_selection") != "fallback" or not task["thinking"]:
         return None
     base = state["conditions"][task["model"]]["base_alias"]
-    return next(t for t in state["tasks"] if t["model"] == base and t["case"] == task["case"])
+    return next((t for t in state["tasks"] if t["model"] == base and t["case"] == task["case"]), None)
 
 
 def fallback_skip_reason(source):
@@ -95,7 +95,8 @@ def validate_run(state):
         raise ValueError("题库或思考测试版本变化，不能混合续跑；请新建运行目录。")
     expected = condition_plan(state["selected_models"], state["thinking_selection"])
     if (state.get("conditions") != expected or set(state["models"]) != set(expected)
-            or any(t["model"] not in expected or t.get("thinking") is not expected[t["model"]]["thinking"]
+            or any(t["model"] not in expected or t.get("thinking") != expected[t["model"]]["thinking"]
+                   or type(t.get("thinking")) is not type(expected[t["model"]]["thinking"])
                    for t in state["tasks"])):
         raise ValueError("运行目录中的模型／思考模式发生变化，不能混合续跑。")
 
@@ -108,6 +109,9 @@ def bind_capabilities(state, available):
         info = available[model.lower()]
         if state["conditions"][alias]["thinking"] and info.get("thinking") is not True:
             raise ValueError(f"服务未确认{alias}的thinking能力；请更新并重启5080、检查models，不会改成普通模式计分。")
+        value = state["conditions"][alias]["thinking"]
+        if isinstance(value, str) and value not in info.get("thinkingLevels", []):
+            raise ValueError(f"服务未确认{alias}的思考等级。")
         capabilities[alias] = info
     return capabilities
 
@@ -177,8 +181,7 @@ def client_environment(directory, info, relay):
                       "reasoning": info.get("thinking", False), "options": {"think": thinking},
                       "limit": model_limits(info)}}}}}
     if info.get("thinking"):
-        config["provider"]["aiserver"]["models"][info["id"]]["variants"] = {
-            "normal": {"think": False}, "thinking": {"think": True}}
+        config["provider"]["aiserver"]["models"][info["id"]]["variants"] = thinking_variants(info)
     if not info.get("toolCall", False):
         config["agent"]["benchmark-text"] = {"description": "Single file text evaluation", "mode": "primary",
             "tools": {"*": False}, "permission": {"*": "deny"},
@@ -242,9 +245,9 @@ def main():
     parser.add_argument("--resume", type=Path, help="继续未开始的题目；已开始题目不重跑")
     parser.add_argument("--report-only", type=Path, help="离线重建客户端Markdown")
     parser.add_argument("--prepare-only", action="store_true", help="只生成题目和待运行Markdown，不读取key或访问服务")
-    parser.add_argument("--models", nargs="+", choices=ACTIVE_MODELS, default=list(ACTIVE_MODELS))
+    parser.add_argument("--models", nargs="+", choices=ACTIVE_MODELS, default=list(DEFAULT_MODELS))
     parser.add_argument("--profile", choices=("roles", "calibration"), help="默认roles：9B简单/中等，27B中等/困难；calibration默认只做简单校准")
-    parser.add_argument("--thinking", choices=("off", "on", "both", "fallback"),
+    parser.add_argument("--thinking", choices=("off", "on", "both", "fallback", "low", "medium", "high"),
                         help="默认fallback：普通模式未解决才独立重试thinking；both做全部双模式对照")
     parser.add_argument("--levels", nargs="+", choices=tuple(TIMEOUTS), help="显式覆盖计划中各模型的难度范围")
     parser.add_argument("--timeout-seconds", type=int, help="覆盖普通模式每题总限时")

@@ -9,7 +9,7 @@ def model_description(profile, settings):
     policy = cfg.get("ImagePolicy", {})
     vision = "image" in profile.accepted_input_types
     window = all(key in cfg for key in ("NumCtx", "ReservedTokens")) and max_output_tokens(cfg) is not None
-    return {
+    description = {
         "id": cfg.get("Model", "fake-v1"),
         "inputTypes": list(profile.accepted_input_types),
         "outputTypes": ["text"],
@@ -35,3 +35,7 @@ def model_description(profile, settings):
         "roleMappings": {"developer": "system"},
         "outputLimitPolicy": "reject-above-limit",
     }
+    if cfg.get("ThinkingLevels"):
+        description.update(thinkingLevels=cfg["ThinkingLevels"],
+                           defaultThinkingLevel=cfg["DefaultThinkingLevel"], thinkingCanDisable=False)
+    return description

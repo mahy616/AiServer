@@ -18,26 +18,41 @@ MODELS = {
     "14b": "aiserver-qwen25-coder:14b-instruct-q4_k_m-yarn128k",
     "9b": "qwen3.5:9b-q4_K_M",
     "qwen38": "hf.co/unsloth/Qwen3.8-27B-GGUF:UD-IQ3_XXS",
+    "gptoss": "gpt-oss:20b",
+    "gemma12": "gemma4:12b-it-q4_K_M",
+    "gemma26": "aiserver-gemma4:26b-a4b-it-q3_k_m",
 }
 TIMEOUTS = {"easy": 180, "medium": 600, "hard": 1800}
 THINKING_TIMEOUTS = {"easy": 600, "medium": 1800, "hard": 3600}
 ROLE_LEVELS = {"7b": ("easy",), "14b": ("easy",), "9b": ("easy", "medium"), "qwen38": ("medium", "hard")}
-THINKING_MODELS = frozenset(("9b", "qwen38"))
-ACTIVE_MODELS = ("9b", "qwen38")  # Older aliases remain readable for archived reports.
+ROLE_LEVELS.update(gptoss=("easy", "medium"), gemma12=("easy", "medium"), gemma26=("easy", "medium"))
+THINKING_MODELS = frozenset(("9b", "qwen38", "gemma12", "gemma26"))
+ACTIVE_MODELS = ("9b", "qwen38", "gptoss", "gemma12", "gemma26")
+DEFAULT_MODELS = ("9b", "qwen38")  # New models must be installed before selecting them.
 
 
 def condition_plan(aliases, thinking):
-    if thinking not in ("off", "on", "both", "fallback"):
-        raise ValueError("thinking须为off、on或both。")
+    if thinking not in ("off", "on", "both", "fallback", "low", "medium", "high"):
+        raise ValueError("未知thinking选项。")
     conditions = {}
     for alias in dict.fromkeys(aliases):
         if alias not in MODELS:
             raise ValueError("包含已移除或未知模型，请新建运行目录。")
+        if alias == "gptoss":
+            if thinking == "off":
+                raise ValueError("GPT-OSS不能关闭思考；请选择low、medium、high、on、both或fallback。")
+            levels = ("low", "medium", "high") if thinking == "both" else (
+                thinking if thinking in ("low", "medium", "high") else "medium",)
+            for level in levels:
+                conditions[alias + "-" + level] = {"base_alias": alias, "thinking": level}
+            continue
+        if thinking in ("low", "medium", "high"):
+            raise ValueError("命名思考等级只适用于GPT-OSS；请单独选择--models gptoss。")
         if thinking != "on":
             conditions[alias] = {"base_alias": alias, "thinking": False}
         if thinking != "off" and alias in THINKING_MODELS:
             conditions[alias + "-thinking"] = {"base_alias": alias, "thinking": True}
-    if thinking in ("on", "both", "fallback") and not any(alias in THINKING_MODELS for alias in aliases):
+    if thinking in ("on", "both", "fallback") and not any(alias in THINKING_MODELS or alias == "gptoss" for alias in aliases):
         raise ValueError("所选模型没有thinking测试项；请选择9b或qwen38，或使用--thinking off。")
     if not conditions:
         raise ValueError("所选模型没有thinking测试项；请选择9b或qwen38，或使用--thinking off。")

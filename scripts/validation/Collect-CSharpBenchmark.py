@@ -15,7 +15,8 @@ from csharp_benchmark.common import ROOT, append_json, redact, utc, write_json
 
 INFERENCE_FIELDS = ("Model", "ProfileId", "EngineVersion", "ExpectedQuantization", "KvCacheType", "FlashAttention",
                     "NumCtx", "NumPredict", "ReservedTokens", "NumBatch", "RequireFullGpu", "Temperature", "TopP", "TopK",
-                    "Seed", "Think", "PresencePenalty", "NumParallel", "MaxLoadedModels", "MaxOutputTokens", "GenerationDefaults")
+                    "Seed", "Think", "PresencePenalty", "NumParallel", "MaxLoadedModels", "MaxOutputTokens", "GenerationDefaults",
+                    "ThinkingLevels", "DefaultThinkingLevel")
 
 
 def select_config(explicit):

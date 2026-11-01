@@ -1,0 +1,19 @@
+{
+  "model": "gemma4:12b-it-q4_K_M",
+  "registry": "https://registry.ollama.ai/v2/library/gemma4",
+  "manifest_path": "manifests/registry.ollama.ai/library/gemma4/12b-it-q4_K_M",
+  "manifest_sha256": "6114515d63c17436a7c0417d82820ac65ad643e2806c5a3c89cb62846436ed0b",
+  "manifest": "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.docker.distribution.manifest.v2+json\",\"config\":{\"mediaType\":\"application/vnd.docker.container.image.v1+json\",\"digest\":\"sha256:e5ca99f918964e7d5a912f974eae708ae59370883a5b182fc0660fe7adf3f0e4\",\"size\":242},\"layers\":[{\"mediaType\":\"application/vnd.ollama.image.projector\",\"digest\":\"sha256:0cb0cd0a5c499d92942caa22fe5abb98f6e8874868d590e2b094ece4ac8e6d28\",\"size\":175115616,\"from\":\"12b/gguf/mmproj-bf16.gguf\"},{\"mediaType\":\"application/vnd.ollama.image.model\",\"digest\":\"sha256:bb722270d54346adc198f213851dbe0207e87c3ecf2a0aff4d92262726215391\",\"size\":7381383680,\"from\":\"imatrix-20260927-12b/model-q4_K_M.gguf\"},{\"mediaType\":\"application/vnd.ollama.image.draft\",\"digest\":\"sha256:7008a656050bed18f6741406a631e83fa75ee1a02308f2e4f40d978cfbb3ce4b\",\"size\":465109152,\"from\":\"12b.gguf\"},{\"mediaType\":\"application/vnd.ollama.image.template\",\"digest\":\"sha256:b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315\",\"size\":13},{\"mediaType\":\"application/vnd.ollama.image.license\",\"digest\":\"sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594\",\"size\":10174},{\"mediaType\":\"application/vnd.ollama.image.params\",\"digest\":\"sha256:2365fbb6d97bf654fdda0353b7505baa2254c662122cff0f153e4b47e6220ded\",\"size\":64}],\"runner\":\"llamacpp\",\"format\":\"gguf\"}",
+  "engine_version": "0.40.9",
+  "quantization": "Q4_K_M",
+  "architecture": "gemma4",
+  "native_context": 262144,
+  "required_capabilities": [
+    "completion",
+    "tools",
+    "thinking"
+  ],
+  "reference": "https://ollama.com/library/gemma4:12b-it-q4_K_M",
+  "upstream_manifest_sha256": "6114515d63c17436a7c0417d82820ac65ad643e2806c5a3c89cb62846436ed0b",
+  "captured_on": "2026-10-30"
+}

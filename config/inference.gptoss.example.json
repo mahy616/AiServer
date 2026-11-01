@@ -1,0 +1,50 @@
+{
+  "Provider": "Ollama",
+  "ProfileId": "gptoss-16k-v1",
+  "EngineVersion": "0.40.9",
+  "ExecutablePath": ".local/apps/ollama/v0.40.9/ollama.exe",
+  "BaseUrl": "http://127.0.0.1:11434",
+  "ModelsPath": ".local/ollama/models",
+  "Model": "gpt-oss:20b",
+  "ExpectedQuantization": "MXFP4",
+  "RequiredCapabilities": [
+    "completion",
+    "tools",
+    "thinking"
+  ],
+  "ModelLockPath": "config/models/gptoss.local.json",
+  "FlashAttention": true,
+  "KvCacheType": "q8_0",
+  "NumBatch": 32,
+  "NumCtx": 16384,
+  "NumPredict": 4096,
+  "ReservedTokens": 512,
+  "MaxTextUtf8Bytes": 2097152,
+  "KeepAlive": "10m",
+  "MaxLoadedModels": 1,
+  "NumParallel": 1,
+  "EngineMaxQueue": 1,
+  "ConnectTimeoutSeconds": 5,
+  "GenerateTimeoutSeconds": 3600,
+  "MaxResponseBytes": 8388608,
+  "ImagePolicy": {
+    "MaxImages": 0,
+    "MaxBytesPerImage": 0,
+    "MaxLongEdge": 0,
+    "MaxPixelsPerImage": 0,
+    "AllowedFormats": [],
+    "ProcessingVersion": "text-only-v1"
+  },
+  "Budget": {
+    "Method": "conservative-estimate-v1",
+    "IsExact": false
+  },
+  "RequireFullGpu": true,
+  "GenerationDefaults": {},
+  "ThinkingLevels": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "DefaultThinkingLevel": "medium"
+}

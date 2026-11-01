@@ -23,7 +23,8 @@
     "top_k": {"type": "integer", "minimum": 0, "maximum": 100000},
     "presence_penalty": {"type": "number", "minimum": -2, "maximum": 2},
     "repeat_penalty": {"type": "number", "minimum": 0, "maximum": 10},
-    "think": {"type": ["boolean", "null"], "default": false, "description": "Request opt-in: absent/null/false disables thinking; true enables only engine-verified thinking models. Unsupported models ignore this flag. Legacy GenerationDefaults.think does not enable thinking."},
+    "think": {"oneOf": [{"type": ["boolean", "null"]}, {"enum": ["low", "medium", "high"]}], "description": "Boolean models default off. Named-level models use their published default for absent/null/true, accept published levels, and reject false. Unsupported named levels return 400; legacy boolean behavior is preserved."},
+    "reasoning_effort": {"enum": ["low", "medium", "high", null], "description": "Alias for named think; conflicting non-null controls are rejected."},
     "max_tokens": {"type": "integer", "minimum": 1, "maximum": 1048576},
     "max_completion_tokens": {"type": "integer", "minimum": 1, "maximum": 1048576},
     "stop": {"oneOf": [

@@ -133,6 +133,8 @@ class RealProvider:
                 raise ValueError("Model identity mismatch")
             self.supports_tools = "tools" in show["capabilities"]
             self.supports_thinking = "thinking" in show["capabilities"]
+            from aiserver.inference.thinking import verify_thinking
+            verify_thinking(self.cfg, show)
             if self.lock.get("yarn"):
                 info = show.get("model_info", {})
                 if any(info.get(k) != v for k, v in self.lock["yarn"].items()):

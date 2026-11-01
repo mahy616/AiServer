@@ -1,0 +1,7 @@
+{
+  "model": "gpt-oss:20b",
+  "messages": [{"role": "user", "content": "Explain this C# function and suggest an improvement."}],
+  "reasoning_effort": "medium",
+  "max_tokens": 4096,
+  "stream": true
+}

@@ -40,6 +40,9 @@ def generation_defaults(cfg):
 
 
 def validate_options(cfg):
+    if "ThinkingLevels" in cfg or "DefaultThinkingLevel" in cfg:
+        from aiserver.inference.thinking import validate_thinking_config
+        validate_thinking_config(cfg)
     generation_defaults(cfg)
     flash = cfg.get("FlashAttention")
     cache = cfg.get("KvCacheType", "f16")

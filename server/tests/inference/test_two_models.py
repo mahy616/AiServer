@@ -51,7 +51,7 @@ def test_migration_keeps_only_9b_27b_with_limits_backups_and_idempotency(deploym
     expected_server = {**json.loads(before[server]), "inference_config": files[2].relative_to(root).as_posix(),
                        "additional_inference_configs": [files[3].relative_to(root).as_posix()]}
     assert json.loads(server.read_bytes()) == expected_server
-    for path, context in zip(files[2:], (131072, 65536)):
+    for path, context in zip(files[2:], (131072, 81920)):
         assert json.loads(path.read_bytes()) == {**json.loads(before[path]), "NumCtx": context,
                                                  "NumPredict": 16384, "MaxOutputTokens": 16384}
     assert all(p.read_bytes() == before[p] for p in files[:2])

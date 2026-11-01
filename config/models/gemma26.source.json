@@ -1,0 +1,24 @@
+{
+  "model": "aiserver-gemma4:26b-a4b-it-q3_k_m",
+  "registry": "https://huggingface.co/v2/bartowski/google_gemma-4-26B-A4B-it-GGUF",
+  "manifest_path": "manifests/registry.ollama.ai/library/aiserver-gemma4/26b-a4b-it-q3_k_m",
+  "manifest_sha256": "872402bdeea1fe4ac2f03b8c80879d76a7a0b06eae684dd6d669edec876af6a6",
+  "manifest": "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.docker.distribution.manifest.v2+json\",\"config\":{\"mediaType\":\"application/vnd.docker.container.image.v1+json\",\"digest\":\"sha256:c93d3956ada4b4d6dedf301c4baa985b0d7e452b28d79d8c83833a963de1d2d0\",\"size\":175},\"layers\":[{\"digest\":\"sha256:4826221b7a285284b65222537f58ebfc6880290ff5441e13bfb1a7ca4d65df21\",\"mediaType\":\"application/vnd.ollama.image.model\",\"size\":13019981440},{\"digest\":\"sha256:41cdabd1e8066e983ee6c288eb0117777376223ee0279cadcd67b2295e4d975f\",\"mediaType\":\"application/vnd.ollama.image.projector\",\"size\":1193058528},{\"mediaType\":\"application/vnd.ollama.image.template\",\"digest\":\"sha256:b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315\",\"size\":13},{\"mediaType\":\"application/vnd.ollama.image.params\",\"digest\":\"sha256:fdc14209e9df83a3837b264cd74eba5a3cb8e855b14872a12db13b3b1d293eed\",\"size\":41}],\"runner\":\"llamacpp\",\"format\":\"gguf\"}",
+  "engine_version": "0.40.9",
+  "quantization": "Q3_K_M",
+  "architecture": "gemma4",
+  "native_context": 262144,
+  "required_capabilities": [
+    "completion",
+    "tools",
+    "thinking"
+  ],
+  "reference": "https://huggingface.co/bartowski/google_gemma-4-26B-A4B-it-GGUF",
+  "upstream_manifest_sha256": "97c7e63efe485b0074c2a5c98fba4ac461f808d26f2821272375719e81bfa755",
+  "captured_on": "2026-10-30",
+  "inline_blobs": {
+    "sha256:c93d3956ada4b4d6dedf301c4baa985b0d7e452b28d79d8c83833a963de1d2d0": "{\"model_format\":\"gguf\",\"model_family\":\"gemma4\",\"model_families\":[\"gemma4\"],\"model_type\":\"25.2B\",\"file_type\":\"Q3_K_M\",\"renderer\":\"gemma4\",\"parser\":\"gemma4\",\"requires\":\"0.20.0\"}",
+    "sha256:b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315": "{{ .Prompt }}",
+    "sha256:fdc14209e9df83a3837b264cd74eba5a3cb8e855b14872a12db13b3b1d293eed": "{\"temperature\":1,\"top_k\":64,\"top_p\":0.95}"
+  }
+}

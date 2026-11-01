@@ -236,19 +236,21 @@ def test_collector_read_only_task_filter_and_log_rotation(tmp_path):
 
 
 @pytest.mark.parametrize("needs_fix", [False, True])
-@pytest.mark.parametrize("thinking", [False, True])
+@pytest.mark.parametrize("thinking", [False, True, "low", "high"])
 def test_real_opencode_read_write_single_session_against_synthetic_model(tmp_path, needs_fix, thinking):
     binary = ROOT / ".local/apps/opencode/node_modules/opencode-ai/bin/opencode.exe"
     if not binary.is_file() or not shutil.which("dotnet"):
         pytest.skip("Requires installed OpenCode and .NET SDK")
-    state = runner.prepare(tmp_path / "run", ["9b"], ["easy"], ["read"], thinking="on" if thinking else "off")
+    named = isinstance(thinking, str)
+    state = runner.prepare(tmp_path / "run", ["gptoss" if named else "9b"], ["easy"], ["read"],
+                           thinking=thinking if named else "on" if thinking else "off")
     task = state["tasks"][0]
     case = next(c for c in CASES if c.id == task["case"])
     directory = tmp_path / "run/cases" / task["id"]
-    model = state["models"]["9b-thinking" if thinking else "9b"]
+    model = state["models"][task['model']]
     tool_names = []
     def responder(body):
-        assert body.get("think") is thinking
+        assert body.get("think") == thinking
         if thinking:
             yield event(model, {"reasoning_content": "SYNTHETIC_THOUGHT"})
         is_reading = relay.phase == "reading"
@@ -271,6 +273,8 @@ def test_real_opencode_read_write_single_session_against_synthetic_model(tmp_pat
                "choices": [], "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}}
     info = {"id": model, "toolCall": True, "thinking": True, "benchmark_thinking": thinking,
             "limits": {"contextTokens": 81920, "maxInputTokens": 81407, "maxOutputTokens": 8192}}
+    if named:
+        info.update(thinkingLevels=['low', 'medium', 'high'], defaultThinkingLevel='medium')
     with synthetic_api(responder) as server, Recorder(server, "synthetic-not-a-personal-key", directory / "http", model,
                                                      expected_thinking=thinking) as relay:
         result = runner.execute_task(binary, shutil.which("dotnet"), case, directory, info, relay, 120)
@@ -282,9 +286,21 @@ def test_real_opencode_read_write_single_session_against_synthetic_model(tmp_pat
     assert result["correction_used"] is needs_fix
     assert result["first"]["evaluation"]["all_passed"] is not needs_fix
     assert "write" not in tool_names[0] and "bash" not in tool_names[0]
-    assert result["thinking"] is thinking
-    assert all(r["requested_thinking"] is thinking and r["expected_thinking"] is thinking for r in result["requests"])
-    assert all((r["reasoning_chars"] > 0) is thinking for r in result["requests"])
+    assert result["thinking"] == thinking
+    assert all(r["requested_thinking"] == thinking and r["expected_thinking"] == thinking for r in result["requests"])
+    assert all((r["reasoning_chars"] > 0) is bool(thinking) for r in result["requests"])
+
+
+def test_five_model_benchmark_and_gptoss_levels_are_independent(tmp_path):
+    state = runner.prepare(tmp_path / 'run', list(runner.ACTIVE_MODELS), ['easy'], ['write'], thinking='both')
+    runner.validate_run(state)
+    assert len(state['conditions']) == 11
+    assert [c['thinking'] for c in state['conditions'].values() if c['base_alias'] == 'gptoss'] == ['low', 'medium', 'high']
+    assert len({t['id'] for t in state['tasks']}) == 11
+    with pytest.raises(ValueError, match='不能关闭'):
+        runner.prepare(tmp_path / 'invalid', ['gptoss'], ['easy'], ['write'], thinking='off')
+    state = runner.prepare(tmp_path / 'fallback', ['gptoss'], ['easy'], ['write'], thinking='fallback')
+    assert runner.fallback_source(state, state['tasks'][0]) is None
 
 
 def test_real_opencode_text_only_model_does_not_require_tools(tmp_path):
@@ -368,7 +384,7 @@ def test_default_role_plan_and_old_deepseek_run_cannot_resume(tmp_path, monkeypa
 
 
 def test_calibration_keeps_twelve_conditions_and_longer_thinking_budgets(tmp_path):
-    state = runner.prepare(tmp_path / "run", list(runner.MODELS), None, ["read", "write"], "both", "calibration")
+    state = runner.prepare(tmp_path / "run", ["7b", "14b", "9b", "qwen38"], None, ["read", "write"], "both", "calibration")
     assert len(state["tasks"]) == 12 and all(t["case"].startswith("easy-") for t in state["tasks"])
     assert {t["timeout_seconds"] for t in state["tasks"] if t["thinking"]} == {600}
     assert {t["timeout_seconds"] for t in state["tasks"] if not t["thinking"]} == {180}
@@ -433,7 +449,7 @@ def test_reading_analysis_gets_one_correction_even_when_code_already_passes(tmp_
 
 @pytest.mark.parametrize("selection,count", [("off", 8), ("on", 4), ("both", 12)])
 def test_thinking_plans_keep_identical_material_and_separate_sessions(tmp_path, selection, count):
-    state = runner.prepare(tmp_path / "run", list(runner.MODELS), ["easy"], ["read", "write"], thinking=selection)
+    state = runner.prepare(tmp_path / "run", ["7b", "14b", "9b", "qwen38"], ["easy"], ["read", "write"], thinking=selection)
     assert len(state["tasks"]) == count
     runner.validate_run(state)
     if selection == "both":

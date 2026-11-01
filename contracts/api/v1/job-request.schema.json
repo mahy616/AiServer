@@ -19,11 +19,10 @@
       "maxLength": 128
     },
     "think": {
-      "description": "Request opt-in: absent/null/false disables thinking; true enables only engine-verified thinking models. Unsupported models ignore this flag. Legacy GenerationDefaults.think does not enable thinking.",
-      "default": false,
-      "type": [
-        "boolean",
-        "null"
+      "description": "Boolean models default off. Named-level models use their published default for absent/null/true, accept published levels, and reject false. Unsupported named levels return 400.",
+      "oneOf": [
+        {"type": ["boolean", "null"]},
+        {"enum": ["low", "medium", "high"]}
       ]
     },
     "messages": {
@@ -104,5 +103,5 @@
       }
     }
   },
-  "description": "Text, reasoning history and images are preserved. Optional think explicitly opts in on supported models; absent/null defaults off; generation output uses the public resource cap. All text/history/tools share byte and context limits."
+  "description": "Text, reasoning history and images are preserved. Optional think follows the selected model's boolean or named-level policy; generation output uses the public resource cap. All text/history/tools share byte and context limits."
 }

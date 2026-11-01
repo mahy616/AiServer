@@ -140,11 +140,11 @@ def configure(record, result):
     for item in models:
         descriptions[item["id"]] = {"name": item["id"], "tool_call": item.get("toolCall", False),
             "reasoning": item.get("thinking", False),
-            "options": {"think": False},
+            "options": thinking_options(item),
             "modalities": {"input": item.get("inputTypes", ["text"]), "output": item.get("outputTypes", ["text"])},
             "limit": model_limits(item)}
         if item.get("thinking", False):
-            descriptions[item["id"]]["variants"] = {"normal": {"think": False}, "thinking": {"think": True}}
+            descriptions[item["id"]]["variants"] = thinking_variants(item)
     provider["models"] = descriptions
     model = next((m for m in models if "aiserver/" + m["id"] == previous.get("model")), models[0])
     cfg.update(model="aiserver/" + model["id"], enabled_providers=["aiserver"], autoupdate=False)
@@ -161,6 +161,16 @@ def configure(record, result):
     atomic_write(CONFIG, json_bytes(cfg))
     atomic_write(WORK / "connection-summary.json", json_bytes(summary))
     return summary
+
+
+def thinking_options(item):
+    return {"think": item.get("defaultThinkingLevel", "medium") if item.get("thinkingLevels") else False}
+
+
+def thinking_variants(item):
+    if item.get("thinkingLevels"):
+        return {level: {"think": level} for level in item["thinkingLevels"]}
+    return {"normal": {"think": False}, "thinking": {"think": True}}
 
 
 def model_limits(item):

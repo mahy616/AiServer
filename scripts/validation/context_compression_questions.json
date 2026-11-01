@@ -1,0 +1,16 @@
+{
+  "scope": "e3dfe46-parent-csharp-samples-v1",
+  "notes": "供下一步原文／压缩资料／索引加回查对照使用。答案不放进模型请求；不代表完整IMV SDK契约。",
+  "questions": [
+    {"id": "script-entry", "materials": ["C#脚本示例.txt", "C#脚本示例2.txt"], "question": "根据样例，写出脚本的命名空间、类名、Execute入口签名和Script_Function的构造方式。", "reference": "NamespaceCsharpScriptEngine；CsharpScriptClass；public static void Execute(Guid processkey)；new Script_Function(processkey)。"},
+    {"id": "observed-api-scopes", "materials": ["C#脚本示例.txt", "C#脚本示例2.txt"], "question": "样例分别如何读取工具输出、流程内变量和全局变量？写出原文调用例子，并说明能否仅凭样例确定SDK的完整方法签名和返回类型。", "reference": "GetValue(67,\"Distance\")；GetVarValue(2,\"index\")；GetGlobalVarValue(\"photoCount\")。只能确认样例调用及显式强转，不能推导完整SDK签名、全部重载或普遍返回类型。"},
+    {"id": "gap-boundary", "materials": ["C#脚本示例.txt"], "question": "仅考虑gap检查，gap恰好等于上限或下限时会进入该检查的NG分支吗？列出触发条件。", "reference": "不会；条件是gap < gap_threshold_down || gap > gap_threshold_up，等号不触发该分支。"},
+    {"id": "compensation-order", "materials": ["C#脚本示例.txt"], "question": "top和bottom的位置度差分别使用A还是B补偿？补偿加在绝对值内部还是外部？", "reference": "top使用B，bottom使用A；补偿均加在Math.Abs之外。"},
+    {"id": "pin-count-and-index", "materials": ["C#脚本示例.txt"], "question": "GenerateActual112PinPositionValues实际生成多少项？若index为0，actualValues[70-index]是否越界？不要仅依据函数名称判断。", "reference": "三个循环分别28、14、28项，共70项，合法下标0至69；index=0时访问70越界。样例名称和注释不能作为112项已实现的证据。"},
+    {"id": "trigger-semantics", "materials": ["C#脚本示例2.txt"], "question": "trigger是上升沿允许标志还是拍照分支编号？xunhuan是否由该脚本修改？第四次完成通知后谁复位photoCount和trigger？", "reference": "trigger为1/2/3/4分支编号，已不再是旧上升沿标志；脚本不修改xunhuan；第四次通知成功后由外部复位photoCount和trigger。"},
+    {"id": "serial-config", "materials": ["C#脚本示例2.txt"], "question": "列出串口配置、读写超时、应接收字节数和发送请求的完整8个字节。", "reference": "COM7，38400，Parity.None，8，StopBits.One；读写8000毫秒；接收13字节；01 04 00 00 00 04 F1 C9。"},
+    {"id": "signal-and-fourth", "materials": ["C#脚本示例2.txt"], "question": "photoCount为0、1、2、3时分别读取哪个received下标？photoCount为4时是否还打开串口？", "reference": "4、6、8、10；count为4时设置index=9后直接return，不打开串口。"},
+    {"id": "receive-time-budget", "materials": ["C#脚本示例2.txt"], "question": "接收循环是每次重新给8000毫秒，还是维持一个总时限？解释remaining的计算和短读处理。", "reference": "总时限；remaining=8000-(int)timer.ElapsedMilliseconds，每轮ReadTimeout设为remaining，offset累加直到13字节；remaining<=0超时，n<=0报错。"},
+    {"id": "reply-validation", "materials": ["C#脚本示例2.txt"], "question": "代码检查了回复的哪些字段，是否检查CRC？异常时如何报告状态？", "reference": "检查received[0]==0x01、[1]==0x04、[2]==8；没有实现回复CRC检查，不能声称完整校验；catch中index设为-1并弹出监听失败信息。"}
+  ]
+}

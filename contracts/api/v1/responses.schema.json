@@ -779,7 +779,17 @@
               },
               "thinking": {
                 "type": "boolean",
-                "description": "Engine-verified native thinking capability, not the enabled mode. Thinking defaults off and requires request think=true; unsupported models ignore the flag."
+                "description": "Engine-verified thinking capability; consult thinkingLevels for models with named levels."
+              },
+              "thinkingLevels": {
+                "type": "array", "items": {"enum": ["low", "medium", "high"]}, "uniqueItems": true,
+                "description": "Engine-verified named levels, when present."
+              },
+              "defaultThinkingLevel": {
+                "enum": ["low", "medium", "high"]
+              },
+              "thinkingCanDisable": {
+                "type": "boolean", "description": "False for GPT-OSS; a low level still performs reasoning."
               }
             },
             "additionalProperties": false

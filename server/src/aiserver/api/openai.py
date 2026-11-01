@@ -88,6 +88,9 @@ class ChatValidator:
             invalid(".".join(str(x) for x in error.absolute_path) or "request")
         if "max_tokens" in value and "max_completion_tokens" in value:
             invalid("max_tokens", "conflicting_output_limits")
+        if (value.get("reasoning_effort") is not None and value.get("think") is not None
+                and value["think"] != value["reasoning_effort"]):
+            invalid("reasoning_effort", "conflicting_thinking_controls")
         tools = value.get("tools", [])
         names = [tool["function"]["name"] for tool in tools]
         if len(names) != len(set(names)):
@@ -194,6 +197,8 @@ class ChatValidator:
                       "parallel_tool_calls": value.get("parallel_tool_calls", True), "options": options}
         if "think" in value:
             normalized["think"] = value["think"]
+        if value.get("reasoning_effort") is not None:
+            normalized["think"] = value["reasoning_effort"]
         raw_task = wire_json(normalized)
         return (value, normalized, hashlib.sha256(raw_task.encode()).hexdigest(),
                 TaskInput(raw_task, tuple(images)))

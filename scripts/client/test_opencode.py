@@ -137,9 +137,25 @@ def test_reasoning_is_opt_in_with_variants_only_for_capable_models(monkeypatch, 
     assert entry["options"] == {"think": False} and "variants" not in entry
 
 
+def test_gptoss_levels_and_existing_selection_survive_refresh(monkeypatch, tmp_path):
+    locations(monkeypatch, tmp_path)
+    result = remote()
+    models = result['/api/v1/models']['models']
+    models.append({**models[0], 'id': 'gpt-oss:20b', 'thinking': True, 'toolCall': True,
+                   'thinkingLevels': ['low', 'medium', 'high'], 'defaultThinkingLevel': 'medium',
+                   'thinkingCanDisable': False})
+    support.configure(support.key_record(support.DEFAULT_SERVER, KEY), result)
+    cfg = json.loads(support.CONFIG.read_bytes())
+    assert cfg['model'] == 'aiserver/' + models[0]['id']
+    entry = cfg['provider']['aiserver']['models']['gpt-oss:20b']
+    assert entry['options'] == {'think': 'medium'}
+    assert entry['variants'] == {level: {'think': level} for level in ('low', 'medium', 'high')}
+    assert entry['tool_call'] is True and 'normal' not in entry['variants']
+
+
 @pytest.mark.parametrize("template,expected", [
     ("coder", 114176), ("coder14b", 65024), ("qwen35", 114176),
-    ("qwen38", 48640), ("5080", 28160), ("5080.8b", 28160),
+    ("qwen38", 65024), ("5080", 28160), ("5080.8b", 28160),
 ])
 def test_each_model_reserves_default_output_even_with_older_server(template, expected):
     cfg = json.loads((support.ROOT / f"config/inference.{template}.example.json").read_bytes())

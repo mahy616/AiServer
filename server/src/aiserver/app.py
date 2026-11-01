@@ -208,6 +208,9 @@ def create_app(settings=None, *, profile=None, budget=None, provider=None):
                 if hasattr(scheduler.provider, "tools_supported") else getattr(scheduler.provider, "supports_tools", False))
             description["thinking"] = bool(scheduler.provider.thinking_supported(profile)
                 if hasattr(scheduler.provider, "thinking_supported") else getattr(scheduler.provider, "supports_thinking", False))
+            if not description["thinking"]:
+                for key in ("thinkingLevels", "defaultThinkingLevel", "thinkingCanDisable"):
+                    description.pop(key, None)
             description["inputTypes"] = [t for t in description["inputTypes"] if t in budget.accepted_input_types]
             descriptions.append(description)
         return {"models": descriptions}

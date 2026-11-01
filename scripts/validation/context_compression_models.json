@@ -1,0 +1,98 @@
+{
+  "assets": [
+    {
+      "id": "qwen35-tokenizer",
+      "directory": "tokenizers/qwen35",
+      "repository": "Qwen/Qwen3.5-9B",
+      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+      "files": [
+        {
+          "name": "tokenizer.json",
+          "size": 12807982,
+          "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "size": 16710,
+          "sha256": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8"
+        }
+      ]
+    },
+    {
+      "id": "mbert",
+      "directory": "models/llmlingua-2-bert-base-multilingual-cased-meetingbank",
+      "repository": "microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank",
+      "revision": "5f0c82792b7ea14c6484e015b6a072009496b7f2",
+      "files": [
+        {
+          "name": "config.json",
+          "size": 875,
+          "sha256": "e6c33ec2f099e659e125efaa8b7bb07a6e65b7d9fc36211c6fa3206e1c399085"
+        },
+        {
+          "name": "model.safetensors",
+          "size": 709388104,
+          "sha256": "22b9ecde52fec5c97e8c54a293be768727df95a81c6c8dccb03f262a50c58324"
+        },
+        {
+          "name": "special_tokens_map.json",
+          "size": 125,
+          "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3"
+        },
+        {
+          "name": "tokenizer.json",
+          "size": 2919362,
+          "sha256": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "size": 1191,
+          "sha256": "214f78f6c5d034a8b405632d301ee3710eb6f075b3f5faf8241a273a13908746"
+        },
+        {
+          "name": "vocab.txt",
+          "size": 995526,
+          "sha256": "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c"
+        }
+      ]
+    },
+    {
+      "id": "xlm-roberta",
+      "directory": "models/llmlingua-2-xlm-roberta-large-meetingbank",
+      "repository": "microsoft/llmlingua-2-xlm-roberta-large-meetingbank",
+      "revision": "ebaba9b0e874dadd3003ffcff828e4397e568089",
+      "files": [
+        {
+          "name": "config.json",
+          "size": 752,
+          "sha256": "a3fdcf4e63057797101ecc84412bc654f9adb4e8d4ed3c91c5afb28eda327706"
+        },
+        {
+          "name": "model.safetensors",
+          "size": 2235829648,
+          "sha256": "a33a153b2493bff6be06af6921e69de9c0d0bb6ff06fe5bbb68670ba8d980ae2"
+        },
+        {
+          "name": "special_tokens_map.json",
+          "size": 280,
+          "sha256": "06e405a36dfe4b9604f484f6a1e619af1a7f7d09e34a8555eb0b77b66318067f"
+        },
+        {
+          "name": "tokenizer.json",
+          "size": 17082756,
+          "sha256": "f59925fcb90c92b894cb93e51bb9b4a6105c5c249fe54ce1c704420ac39b81af"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "size": 1147,
+          "sha256": "f90024142df07163e5e6c5b9a6ad7c8c68b22a9112af11e3db4559a9ff90f737"
+        }
+      ]
+    }
+  ],
+  "tiktoken": {
+    "url": "https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken",
+    "filename": "9b5ad71b2ce5302211f9c61530b329a4922fc6a4",
+    "sha256": "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"
+  }
+}

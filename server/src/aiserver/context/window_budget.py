@@ -37,14 +37,15 @@ def input_budget(cfg, output_tokens=None):
 
 
 def freeze_output(prepared, cfg, *, supports_thinking=False):
+    from aiserver.inference.thinking import resolve_thinking
     defaults = generation_defaults(cfg)
-    # Thinking is request opt-in, including with older private admin defaults.
+    # Boolean thinking is request opt-in. Named controls use their model policy.
     # Unsupported models receive no think field at all (Ollama may reject it).
     defaults.pop("think", None)
     options = {**defaults, **json.loads(prepared.options_json)}
     options["num_predict"] = output_budget(cfg, options)
     prepared = replace(prepared, options_json=json.dumps(options),
-                       think=(prepared.think is True) if supports_thinking else None)
+                       think=resolve_thinking(cfg, prepared.think, supports_thinking))
     return replace(prepared, content_sha256=prepared.material_sha256())
 
 

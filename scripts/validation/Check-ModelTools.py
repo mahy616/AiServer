@@ -11,7 +11,7 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "scripts/client"), str(Path(__file__).parent)]
 from opencode_support import BINARY, saved_key, probe
-from csharp_benchmark.common import ACTIVE_MODELS, MODELS, utc, write_json
+from csharp_benchmark.common import ACTIVE_MODELS, DEFAULT_MODELS, MODELS, utc, write_json
 from csharp_benchmark.relay import Recorder, wait_ready
 
 spec = importlib.util.spec_from_file_location("tools_benchmark_client", Path(__file__).with_name("Benchmark-CSharp.py"))
@@ -23,6 +23,13 @@ def verify(directory, binary, info, record, *, thinking="both", normal_timeout=1
     directory = Path(directory)
     (directory / "workspace").mkdir(parents=True, exist_ok=True)
     modes = [False, True, False] if thinking == "both" and info.get("thinking") else [thinking == "on"]
+    if info.get("thinkingLevels"):
+        if thinking == "off":
+            raise ValueError("该模型不能关闭思考；请选择low、medium、high、on或both。")
+        modes = ["low", "high", "low"] if thinking == "both" else [
+            thinking if thinking in info["thinkingLevels"] else info["defaultThinkingLevel"]]
+    elif thinking in ("low", "medium", "high"):
+        raise ValueError("该模型不支持命名思考等级。")
     if modes == [True] and not info.get("thinking"):
         raise ValueError("所选模型不支持thinking")
     if not info.get("toolCall"):
@@ -33,7 +40,8 @@ def verify(directory, binary, info, record, *, thinking="both", normal_timeout=1
         config["permission"].update(write="allow", edit="allow", apply_patch="allow")
         write_json(config_path, config)
         for index, think in enumerate(modes):
-            name = f"{index + 1}-" + ("thinking" if think else "normal")
+            variant = think if isinstance(think, str) else "thinking" if think else "normal"
+            name = f"{index + 1}-" + variant
             proof = "FILE_TOOL_PROOF_" + uuid4().hex
             source = directory / "workspace" / (name + "-note.txt")
             target = directory / "workspace" / (name + "-copy.txt")
@@ -45,7 +53,7 @@ def verify(directory, binary, info, record, *, thinking="both", normal_timeout=1
             relay.expected_thinking, relay.phase, relay.deadline = think, name, time.monotonic() + timeout
             print(directory.name + ": " + name, flush=True)
             result = runner.phase(binary, directory, env, info["id"], prompt, name, timeout, session,
-                                  stop_event=relay.terminal_error, variant=("thinking" if think else "normal") if info.get("thinking") else None)
+                                  stop_event=relay.terminal_error, variant=variant if info.get("thinking") else None)
             previous = session
             session = result.get("session_id") or session
             tools = result.get("tools", [])
@@ -57,7 +65,7 @@ def verify(directory, binary, info, record, *, thinking="both", normal_timeout=1
                           and not result.get("aborted") and result.get("exit_code") == 0 and session
                           and result.get("session_count") == 1 and (previous is None or previous == session)
                           and requests and all(r.get("done") and not r.get("error") and not r.get("transport_error")
-                              and r.get("requested_thinking") is think for r in requests))
+                              and r.get("requested_thinking") == think for r in requests))
             results.append({"phase": name, "thinking": think, "passed": passed, "read_completed": read,
                             "write_completed": wrote, "exact_content": exact, "session_id": session,
                             "seconds": result.get("seconds"), "timeout_seconds": timeout,
@@ -71,8 +79,8 @@ def verify(directory, binary, info, record, *, thinking="both", normal_timeout=1
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--models", nargs="+", choices=ACTIVE_MODELS, default=list(ACTIVE_MODELS))
-    parser.add_argument("--thinking", choices=("off", "on", "both"), default="both")
+    parser.add_argument("--models", nargs="+", choices=ACTIVE_MODELS, default=list(DEFAULT_MODELS))
+    parser.add_argument("--thinking", choices=("off", "on", "both", "low", "medium", "high"), default="both")
     parser.add_argument("--normal-timeout", type=int, default=180)
     parser.add_argument("--thinking-timeout", type=int, default=600)
     parser.add_argument("--output", type=Path)

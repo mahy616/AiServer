@@ -3,6 +3,7 @@ from contextlib import contextmanager, nullcontext
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -21,7 +22,7 @@ def dump(path, value):
 
 
 def setup_tree(root):
-    for key in ('qwen38',):
+    for key in installer.MODEL_KEYS:
         for name in (f'config/inference.{key}.example.json', f'config/models/{key}.source.json'):
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +53,7 @@ def engine_for(root, failure=None, seen=None):
             current = json.loads(path.read_bytes())
             dump(path, {**current, 'port': 19002})
         current = [json.loads((root / 'config/original.json').read_bytes())]
-        for key in ('qwen38',):
+        for key in installer.MODEL_KEYS:
             path = root / f'config/inference.{key}.local.json'
             if path.exists():
                 current.append(json.loads(path.read_bytes()))
@@ -60,8 +61,9 @@ def engine_for(root, failure=None, seen=None):
         profiles = {item['Model']: item for item in current}
         def metadata(name):
             item = profiles[name]
-            key = 'qwen38'
-            source = json.loads((root / f'config/models/{key}.source.json').read_bytes())
+            source = next(json.loads((root / f'config/models/{key}.source.json').read_bytes())
+                          for key in installer.MODEL_KEYS
+                          if json.loads((root / f'config/models/{key}.source.json').read_bytes())['model'] == name)
             return item, source
         def fetch(endpoint, body=None):
             if endpoint == '/api/version':
@@ -81,7 +83,8 @@ def engine_for(root, failure=None, seen=None):
                 item, source = metadata(body['model'])
                 return {'template': 'target-template', 'details': {'quantization_level': item['ExpectedQuantization']},
                         'model_info': {'general.architecture': 'wrong' if failure == 'architecture' else source['architecture']},
-                        'capabilities': [] if failure == 'capabilities' else source['required_capabilities']}
+                        'capabilities': [] if failure == 'capabilities' else source['required_capabilities'],
+                        'thinking': {'values': [] if failure == 'thinking' else item.get('ThinkingLevels', [False, True])}}
             if endpoint == '/api/generate':
                 assert body['options']['num_gpu'] == 999 and body['prompt'] == ''
                 assert body['options']['num_ctx'] == cfg['NumCtx']
@@ -96,7 +99,7 @@ def engine_for(root, failure=None, seen=None):
     return engine
 
 
-@pytest.mark.parametrize('key', ['qwen38'])
+@pytest.mark.parametrize('key', installer.MODEL_KEYS)
 @pytest.mark.parametrize('failure', [None, 'gpu', 'window', 'architecture', 'digest', 'capabilities', 'version', 'load', 'concurrent', 'save'])
 def test_install_preserves_private_primary_and_rolls_back(root_dir, monkeypatch, key, failure):
     root = root_dir
@@ -231,19 +234,76 @@ def test_delivered_zip_contains_entrypoints_and_runs_outside_project(tmp_path):
         manifest = json.loads(packed.read('manifest.json'))
         for row in manifest['files']:
             assert hashlib.sha256(packed.read('payload/' + row['path'])).hexdigest() == row['sha256']
-        packed.extractall(tmp_path / 'unpacked')
+        packed.extractall(tmp_path / 'unpacked with spaces')
         assert all(not p.endswith('.local.json') for p in packed.namelist())
-    payload = tmp_path / 'unpacked/payload'
-    for entry in ('Install-Qwen38',):
+    payload = tmp_path / 'unpacked with spaces/payload'
+    for entry in ('Install-Qwen38', 'Install-ExtraModels'):
         assert (payload / (entry + '.cmd')).is_file()
         process = subprocess.run([sys.executable, str(payload / f'scripts/inference/{entry}.py'), '--help'],
                                  cwd=tmp_path, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
         assert process.returncode == 0, process.stderr
         assert '--no-download' in process.stdout
-    for key in ('qwen38',):
+    if os.name == 'nt' and Path('C:/ProgramData/anaconda3/envs/trt_test_1013/python.exe').is_file():
+        for entry in ('Install-ExtraModels', 'Install-GptOss20B', 'Install-Gemma4-12B', 'Install-Gemma4-26B'):
+            process = subprocess.run([os.environ['COMSPEC'], '/d', '/c', str(payload / (entry + '.cmd')), '--help'],
+                                     cwd=tmp_path, input=b'\n', capture_output=True, timeout=30)
+            assert process.returncode == 0, (process.stdout + process.stderr).decode('utf-8', 'replace')
+            assert b'--output-tokens' in process.stdout
+    for key in installer.MODEL_KEYS:
         source = json.loads((payload / f'config/models/{key}.source.json').read_bytes())
         raw, items = installer.manifest_info(source)
         assert items and hashlib.sha256(raw).hexdigest() == source['manifest_sha256']
+
+
+def test_five_models_preserve_primary_and_each_existing_registration(root_dir, monkeypatch):
+    server, _ = setup_tree(root_dir)
+    original = (root_dir / 'config/original.json').read_bytes()
+    monkeypatch.setattr(installer.legacy, 'offline', lambda *args: nullcontext())
+    monkeypatch.setattr(installer, 'download_model', Mock())
+    for key in installer.MODEL_KEYS:
+        installer.install(key, root_dir, server_config=server, engine_factory=engine_for(root_dir))
+    registered = json.loads(server.read_bytes())
+    assert registered['inference_config'] == 'config/original.json'
+    assert len(registered['additional_inference_configs']) == 4
+    assert (root_dir / 'config/original.json').read_bytes() == original
+    before = {p: p.read_bytes() for p in [server, *(root_dir / p for p in registered['additional_inference_configs'])]}
+    for key in ('gptoss', 'gemma12', 'gemma26'):
+        assert installer.install(key, root_dir, server_config=server, engine_factory=engine_for(root_dir))['backup'] is None
+    assert all(p.read_bytes() == data for p, data in before.items())
+
+
+def test_unverified_gptoss_levels_do_not_register(root_dir, monkeypatch):
+    server, _ = setup_tree(root_dir)
+    original = server.read_bytes()
+    monkeypatch.setattr(installer.legacy, 'offline', lambda *args: nullcontext())
+    monkeypatch.setattr(installer, 'download_model', Mock())
+    with pytest.raises(ValueError, match='thinking levels'):
+        installer.install('gptoss', root_dir, server_config=server, engine_factory=engine_for(root_dir, 'thinking'))
+    assert server.read_bytes() == original
+    assert not (root_dir / 'config/inference.gptoss.local.json').exists()
+
+
+def test_gemma26_native_parser_metadata_is_hash_checked_and_published_offline(tmp_path):
+    source = json.loads((ROOT / 'config/models/gemma26.source.json').read_bytes())
+    manifest = json.loads(source['manifest'])
+    cfg = json.loads(source['inline_blobs'][manifest['config']['digest']])
+    assert cfg['renderer'] == cfg['parser'] == 'gemma4' and cfg['file_type'] == 'Q3_K_M'
+    source['inline_blobs'][manifest['config']['digest']] += 'tampered'
+    with pytest.raises(ValueError, match='元数据'):
+        installer.download_model(tmp_path, {'ModelsPath': 'store'}, source, allow_download=False)
+    assert not (tmp_path / 'store').exists()
+
+
+def test_inline_config_blob_can_be_installed_without_a_registry(tmp_path):
+    source, items, blobs = tiny_source()
+    source['inline_blobs'] = {items[0]['digest']: blobs[0].decode()}
+    origin = tmp_path / 'origin/blobs'
+    origin.mkdir(parents=True)
+    (origin / items[1]['digest'].replace(':', '-')).write_bytes(blobs[1])
+    path = installer.download_model(tmp_path, {'ModelsPath': 'store'}, source, origin.parent, allow_download=False)
+    assert path.is_file()
+    for item, data in zip(items, blobs):
+        assert (tmp_path / 'store/blobs' / item['digest'].replace(':', '-')).read_bytes() == data
 
 @pytest.mark.parametrize('offset', [0, 5, 12])
 def test_real_http_download_resumes_and_recovers_complete_partial(tmp_path, monkeypatch, offset):
