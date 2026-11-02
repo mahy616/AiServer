@@ -74,22 +74,47 @@ def download_once(url, target, sha256, size):
     return target
 
 
-def unpack(archive, destination, sha256):
+def filesystem_path(path):
+    """Use extended Win32 paths for archive I/O without requiring host policy changes."""
+    value = os.path.abspath(os.fspath(path))
+    if os.name == "nt" and not value.startswith("\\\\?\\"):
+        value = "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
+    return Path(value)
+
+
+def unpack(archive, destination, sha256, *, include=None):
     """Do not extract through links or publish a partially extracted runtime."""
-    destination = Path(destination)
-    marker = destination / ".aiserver-archive.sha256"
-    if destination.exists():
-        manifest = destination / ".aiserver-files.json"
+    destination = Path(destination).resolve()
+    output = filesystem_path(destination)
+    archive = filesystem_path(archive)
+    if include is not None and (not isinstance(include, (list, tuple)) or not include or
+            not all(isinstance(prefix, str) and prefix for prefix in include)):
+        raise ValueError("Invalid archive selection")
+    selection = list(include) if include is not None else None
+    def selected(name):
+        name = name.replace("\\", "/")
+        return selection is None or any(name.rstrip("/") == prefix.rstrip("/") or
+            prefix.endswith("/") and name.startswith(prefix) for prefix in selection)
+    marker = output / ".aiserver-archive.sha256"
+    if output.exists():
+        manifest = output / ".aiserver-files.json"
         if marker.is_file() and marker.read_text() == sha256 and manifest.is_file():
-            for row in json.loads(manifest.read_text()):
-                file = destination / row["path"]
-                if (not file.resolve().is_relative_to(destination.resolve()) or not file.is_file() or
+            previous = json.loads(manifest.read_text())
+            # v0.10.0/1 recorded a full extraction as a bare list. Full extractions
+            # remain reusable when a newer installer asks for a runtime subset.
+            rows = previous if isinstance(previous, list) else previous["files"]
+            previous_selection = None if isinstance(previous, list) else previous.get("selection")
+            if previous_selection is not None and previous_selection != selection:
+                raise ValueError("Existing runtime extraction selection differs")
+            for row in rows:
+                file = output / row["path"]
+                if (not file.resolve().is_relative_to(output.resolve()) or not file.is_file() or
                         file.stat().st_size != row["size"] or digest(file) != row["sha256"]):
                     raise ValueError("Extracted runtime was modified: " + file.name)
             return destination
         raise ValueError("Existing runtime directory differs; keep it and choose a clean destination")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    stage = destination.with_name(destination.name + ".extract-" + uuid4().hex)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    stage = output.with_name(".unpack-" + uuid4().hex[:12])
     stage.mkdir()
     try:
         if zipfile.is_zipfile(archive):
@@ -98,19 +123,25 @@ def unpack(archive, destination, sha256):
                     name = row.filename.replace("\\", "/")
                     if not (stage / name).resolve().is_relative_to(stage.resolve()) or (row.external_attr >> 16) & 0o170000 == 0o120000:
                         raise ValueError("Unsafe archive entry")
-                packed.extractall(stage)
+                members = [row for row in packed.infolist() if selected(row.filename)]
+                if not any(not row.is_dir() for row in members):
+                    raise ValueError("Archive selection contains no files")
+                packed.extractall(stage, members=members)
         else:
             with tarfile.open(archive) as packed:
                 for row in packed.getmembers():
                     if (not (stage / row.name).resolve().is_relative_to(stage.resolve()) or row.issym() or row.islnk() or
                             not (row.isfile() or row.isdir())):
                         raise ValueError("Unsafe archive entry")
-                packed.extractall(stage, filter="data")
+                members = [row for row in packed.getmembers() if selected(row.name)]
+                if not any(row.isfile() for row in members):
+                    raise ValueError("Archive selection contains no files")
+                packed.extractall(stage, members=members, filter="data")
         rows = [{"path": p.relative_to(stage).as_posix(), "size": p.stat().st_size, "sha256": digest(p)}
                 for p in stage.rglob("*") if p.is_file()]
-        (stage / ".aiserver-files.json").write_bytes(json_bytes(rows))
+        (stage / ".aiserver-files.json").write_bytes(json_bytes({"formatVersion": 2, "selection": selection, "files": rows}))
         (stage / marker.name).write_text(sha256)
-        stage.rename(destination)
+        stage.rename(output)
     except BaseException:
         # Leave a named staging directory for diagnosis; never delete an existing installation.
         raise
@@ -237,7 +268,7 @@ def prepare(args):
             asset = source["artifacts"][name]
             print("Preparing " + name + " (fixed SHA256)", flush=True)
             archive = download(asset["url"], cache / asset["filename"], asset["sha256"], asset["size"])
-            unpack(archive, home / name, asset["sha256"])
+            unpack(archive, home / name, asset["sha256"], include=asset.get("include"))
         runtime = home / "source/Strata-0.2.9"
         if (digest(runtime / "requirements.txt") != source["requirements_sha256"] or
                 digest(runtime / "tools/mtp_fetch.py") != source["mtp_fetch_sha256"]):

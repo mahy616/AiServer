@@ -1,8 +1,12 @@
 """Installer safety with tiny local artifacts; never downloads engines or weights."""
+import builtins
 import hashlib
+import io
 import json
+import os
 from pathlib import Path
 import sys
+import tarfile
 from types import SimpleNamespace
 import zipfile
 
@@ -156,6 +160,76 @@ def test_extraction_reuse_detects_tampering_and_rejects_traversal(tmp_path):
     with pytest.raises(ValueError, match="Unsafe"):
         install.unpack(archive, tmp_path / "unsafe", install.digest(archive))
     assert not (tmp_path / "escaped.py").exists()
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("legacy_limit", [False, True])
+def test_extract_verify_and_reuse_windows_long_paths(tmp_path, monkeypatch, kind, legacy_limit):
+    name = "vendor/" + "/".join("nested-" + str(i) + "-" + "x" * 24 for i in range(6)) + "/runtime.py"
+    destination = tmp_path / "AiServer-0.2.0-be0e34e" / ".local/apps/strata/v0.2.9/source"
+    target = destination / name
+    assert len(str(target)) > 260
+    archive = tmp_path / ("runtime." + kind)
+    content = b"pinned runtime under a long Windows path"
+    if kind == "zip":
+        with zipfile.ZipFile(archive, "w") as packed:
+            packed.writestr(name, content)
+    else:
+        with tarfile.open(archive, "w") as packed:
+            row = tarfile.TarInfo(name)
+            row.size = len(content)
+            packed.addfile(row, io.BytesIO(content))
+    sha = install.digest(archive)
+    if legacy_limit and os.name == "nt":
+        # This development host opts into long paths. Emulate an older Python/Windows
+        # combination at the file API boundary without editing system policy.
+        original_open = builtins.open
+        def legacy_open(file, *args, **kwargs):
+            if not isinstance(file, int):
+                value = os.fspath(file)
+                if len(value) >= 260 and not value.startswith("\\\\?\\"):
+                    raise FileNotFoundError(2, "Simulated legacy MAX_PATH", value)
+            return original_open(file, *args, **kwargs)
+        monkeypatch.setattr(builtins, "open", legacy_open)
+        monkeypatch.setattr(io, "open", legacy_open)
+    install.unpack(archive, destination, sha)
+    readable = Path("\\\\?\\" + str(target)) if os.name == "nt" else target
+    assert readable.read_bytes() == content
+    install.unpack(archive, destination, sha)
+    readable.write_bytes(b"modified")
+    with pytest.raises(ValueError, match="modified"):
+        install.unpack(archive, destination, sha)
+
+
+def test_source_selection_keeps_runtime_and_license_and_skips_benchmark_data(tmp_path):
+    source = json.loads((ROOT / "config/models/strata.source.json").read_bytes())
+    selection = source["artifacts"]["source"]["include"]
+    archive, destination = tmp_path / "source.zip", tmp_path / "source"
+    with zipfile.ZipFile(archive, "w") as packed:
+        for name in ("serve/server.py", "tools/mtp_fetch.py", "strata_control/__init__.py", "data/expert-profile.bin", "LICENSE"):
+            packed.writestr("Strata-0.2.9/" + name, "pinned")
+        packed.writestr("Strata-0.2.9/bench/results/report/requests/" + "a" * 64 + ".json.gz", "unused")
+    sha = install.digest(archive)
+    install.unpack(archive, destination, sha, include=selection)
+    assert (destination / "Strata-0.2.9/serve/server.py").is_file()
+    assert (destination / "Strata-0.2.9/LICENSE").is_file()
+    assert not (destination / "Strata-0.2.9/bench").exists()
+    install.unpack(archive, destination, sha, include=selection)
+    with pytest.raises(ValueError, match="selection differs"):
+        install.unpack(archive, destination, sha)
+
+
+def test_old_full_extraction_manifest_can_be_reused_for_runtime_selection(tmp_path):
+    archive, destination = tmp_path / "source.zip", tmp_path / "source"
+    with zipfile.ZipFile(archive, "w") as packed:
+        packed.writestr("vendor/runtime.py", "pinned")
+        packed.writestr("vendor/bench/report.txt", "original")
+    sha = install.digest(archive)
+    install.unpack(archive, destination, sha)
+    manifest = destination / ".aiserver-files.json"
+    manifest.write_text(json.dumps(json.loads(manifest.read_text())["files"]))
+    install.unpack(archive, destination, sha, include=["vendor/runtime.py"])
+    assert (destination / "vendor/bench/report.txt").read_text() == "original"
 
 
 def test_config_publish_rolls_back_and_refuses_concurrent_edit(tmp_path, monkeypatch):

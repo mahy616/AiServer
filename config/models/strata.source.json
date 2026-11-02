@@ -9,12 +9,33 @@
   "gguf_revision": "3cf03257f219afbe7334045ff7c6a06ac68c627d",
   "artifacts": {
     "source": {
+      "include": [
+        "Strata-0.2.9/serve/",
+        "Strata-0.2.9/strata_control/",
+        "Strata-0.2.9/strata_cli/",
+        "Strata-0.2.9/tools/",
+        "Strata-0.2.9/data/",
+        "Strata-0.2.9/requirements.txt",
+        "Strata-0.2.9/LICENSE",
+        "Strata-0.2.9/NOTICE",
+        "Strata-0.2.9/VERSION",
+        "Strata-0.2.9/README.md",
+        "Strata-0.2.9/setup.py",
+        "Strata-0.2.9/strata.py",
+        "Strata-0.2.9/chat.py",
+        "Strata-0.2.9/highlight.py"
+      ],
       "filename": "Strata-v0.2.9.zip",
       "url": "https://codeload.github.com/Niko1221/Strata/zip/refs/tags/v0.2.9",
       "size": 34878231,
       "sha256": "4c5f3c00ee6a1e28ff17c46f43ca6f8aaeebbc224ad2f4e812b9ac0dafd51e6f"
     },
     "gguf": {
+      "include": [
+        "llama.cpp-3cf03257f219afbe7334045ff7c6a06ac68c627d/gguf-py/",
+        "llama.cpp-3cf03257f219afbe7334045ff7c6a06ac68c627d/LICENSE",
+        "llama.cpp-3cf03257f219afbe7334045ff7c6a06ac68c627d/AUTHORS"
+      ],
       "filename": "llama-3cf03257.zip",
       "url": "https://codeload.github.com/ggml-org/llama.cpp/zip/3cf03257f219afbe7334045ff7c6a06ac68c627d",
       "size": 39564399,
