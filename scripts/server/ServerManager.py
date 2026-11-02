@@ -80,8 +80,8 @@ class ServerManager:
         self.path_widgets.append(self.load_button)
         backend_choices = ttk.Frame(paths)
         backend_choices.grid(row=4, column=1, sticky="w", pady=(6,0))
-        for backend in ("Ollama", "Strata"):
-            choice = ttk.Button(backend_choices, text=backend + "配置", command=lambda name=backend: self.choose_backend(name))
+        for backend, label in (("Ollama", "Ollama配置"), ("Strata", "Strata Qwen"), ("DeepSeek", "Strata DeepSeek")):
+            choice = ttk.Button(backend_choices, text=label, command=lambda name=backend: self.choose_backend(name))
             choice.pack(side="left", padx=(0,8))
             self.path_widgets.append(choice)
         self.tabs=ttk.Notebook(shell)
@@ -99,17 +99,18 @@ class ServerManager:
             self.window.after(180,self.load_config)
 
     def choose_backend(self, backend):
-        filename = "server.strata.local.json" if backend == "Strata" else "server.local.json"
+        filename = {"Strata": "server.strata.local.json", "DeepSeek": "server.strata.deepseek.local.json", "Ollama": "server.local.json"}[backend]
         path = ROOT / "config" / filename
         if not path.is_file():
-            self.feedback.set("请先停服运行Install-Strata.cmd准备Strata。" if backend == "Strata" else "请先选择原Ollama私有服务配置。")
+            self.feedback.set("请先停服运行Install-Strata-DeepSeek.cmd。" if backend == "DeepSeek" else
+                              "请先停服运行Install-Strata.cmd准备Qwen。" if backend == "Strata" else "请先选择原Ollama私有服务配置。")
             return
         try:
             value = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             self.feedback.set("配置无法读取，请检查JSON文件。")
             return
-        if value.get("provider") != backend:
+        if value.get("provider") != ("Strata" if backend == "DeepSeek" else backend):
             self.feedback.set("所选默认文件不是" + backend + "配置，请手工选择正确的服务JSON。")
             return
         self.config.set(str(path))

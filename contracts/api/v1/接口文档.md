@@ -1,10 +1,12 @@
 # AiServer API与OpenCode接入
 
-原生HTTP API路径为`/api/v1`，OpenAI兼容入口为`/v1`。对应服务端版本：0.10.2；更新日期：2026-11-02。OpenCode接入见第10节；第2至9节记录服务端保留的原生接口与认证、任务语义。
+原生HTTP API路径为`/api/v1`，OpenAI兼容入口为`/v1`。对应服务端版本：0.11.0；更新日期：2026-11-02。OpenCode接入见第10节；第2至9节记录服务端保留的原生接口与认证、任务语义。
 
 示例地址和模型名称用于说明；实际服务地址、个人API key及模型由部署方提供。本文不承诺部署当前在线，连接时按实际响应验证。
 
 0.10.0允许服务启动时选择Ollama或Strata，公共接口和认证不变，客户端以models返回的能力为准。Strata初版模型为`qwen3.8-flash-next:iq3_xxs`，仅文字与工具，普通`think=false`／思考`think=true`映射上游none／high；默认总窗口131072、最大输出16384、预留512，思考与正文共用输出预算。容量标为`conservative-estimate-v1`，超限拒绝且不静默截断。手工样例见[Strata OpenCode配置](../../examples/opencode.strata.example.json)和[请求](../../examples/openai-strata-request.json)；部署步骤见运维文档。
+
+0.11.0增加Strata DeepSeek `deepseek-v4.1-flash-1017:iq2_xxs`，仅文字与工具，默认总窗口32768／最大输出16384／预留512；同样使用normal／thinking布尔控制、保守容量估算和共享输出预算。每次服务只发布当前所选Strata模型，停服后换配置启动；客户端重新读取models，不能假定两款同时在线。手工样例见[DeepSeek OpenCode配置](../../examples/opencode.strata.deepseek.example.json)和[请求](../../examples/openai-strata-deepseek-request.json)。引擎、权重或Engram准备均由服务端管理员完成，公网接口没有模型下载或切换管理入口。
 
 ## 1. OpenCode与服务端职责
 

@@ -102,6 +102,12 @@ def inventory(root=ROOT, *, include_reference=True):
             "scripts/inference/strata_prepare.py", "scripts/inference/strata.requirements.txt",
             "scripts/validation/Test-Strata.py", "config/server.strata.example.json",
             "config/inference.strata.example.json", "config/models/strata.source.json"))
+    if tuple(int(x) for x in version.split(".")) >= (0, 11, 0):
+        required.update(root / path for path in (
+            "Install-Strata-DeepSeek.cmd", "Test-StrataModels.cmd", "scripts/validation/Test-StrataModels.ps1",
+            "config/server.strata.deepseek.example.json", "config/inference.strata.deepseek.example.json",
+            "config/models/strata.deepseek.source.json", "contracts/examples/opencode.strata.deepseek.example.json",
+            "contracts/examples/openai-strata-deepseek-request.json"))
     optional = [root / path for path in (
         "config/server.example.json", "config/server.ollama.example.json", "config/natapp.example.ini",
         "config/inference.5080.example.json", "config/inference.5080.8b.example.json",

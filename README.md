@@ -9,8 +9,8 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 ## 使用入口
 
 - 服务管理：双击根目录 `ServerManager.cmd`，选择本机Python和私有配置，加载后管理服务、账号、配置与备份；“运行监控”查看活跃账号、任务性能与硬件资源。
-- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.10.2修复Strata源码解压的Windows长路径问题，并包含0.10.1实例锁修复，原Ollama配置继续有效。
-- Strata初版：停服后双击 `Install-Strata.cmd`，准备固定引擎、Flash-Next完整专家IQ3_XXS与MTP，生成独立私有配置；在管理器选择“Strata配置”后启动。默认128K，部署及回退见[运维](docs/正式工程运维.md#0100-strata初版)，验证边界见[项目进度](docs/项目进度.md)。
+- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.11.0增加Strata DeepSeek IQ2_XXS独立准备、运行与双模型测试，保留此前实例锁及Windows长路径修复。
+- Strata双模型：停服运行`Install-Strata.cmd`准备Qwen Flash-Next IQ3_XXS／MTP，运行`Install-Strata-DeepSeek.cmd`准备DeepSeek V4.1 Flash 1017 IQ2_XXS／Engram／DSpark。在管理器选择“Strata Qwen”或“Strata DeepSeek”启动；双模型依次验收使用`Test-StrataModels.cmd`。步骤与回退见[运维](docs/正式工程运维.md#0110-strata双模型)，验证边界见[项目进度](docs/项目进度.md)。
 - 5080增加三款模型：停服后双击`Install-ExtraModels.cmd`，逐款下载校验GPT-OSS-20B MXFP4、Gemma 4-12B Q4_K_M、Gemma 4-26B-A4B Q3_K_M，全GPU预检通过后追加注册；也提供三个独立入口。OpenCode选择与测试见[运维](docs/正式工程运维.md#0912-增加gpt-oss与gemma-4)。
 - 5080准备模型：双击`Install-Qwen35.cmd`准备9B；双击`Install-Qwen38.cmd`下载固定版本并全GPU预检；步骤见[运维](docs/正式工程运维.md#5080增加qwen38-27b)。双模型统一16K输出与已有部署迁移见[运维](docs/正式工程运维.md#0911-仅使用9b与27b)。
 - 27B升到80K：停服并更新程序后，双击 `Set-Qwen38-80K.cmd`，只备份修改实际注册的27B窗口；9B及其他调优保留。步骤与回退见[运维](docs/正式工程运维.md#27b更新为80k)。
@@ -58,4 +58,4 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 | `scripts/inference/` | 锁定引擎与模型的首次准备工具，按需使用 |
 | `.local/` | 忽略的本机OpenCode、模型、凭据、运行数据与生成产物，不是源码入口 |
 
-本工程保持单服务进程、单生成位；Ollama默认9B／27B，可追加GPT-OSS与两款Gemma；Strata初版固定Flash-Next IQ3_XXS，允许CPU、内存与SSD协同。均开放文字与工具调用。上下文、输出和思考控制从models接口读取。保守容量估算与实际token计数分别记录，超限明确拒绝。
+本工程保持单服务进程、单生成位；Ollama默认9B／27B，可追加GPT-OSS与两款Gemma；Strata可在停服后选择Flash-Next IQ3_XXS或DeepSeek V4.1 Flash IQ2_XXS，允许CPU、内存与SSD协同。均开放文字与工具调用。上下文、输出和思考控制从models接口读取。保守容量估算与实际token计数分别记录，超限明确拒绝。

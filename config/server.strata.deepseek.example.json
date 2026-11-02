@@ -1,0 +1,16 @@
+{
+  "environment": "Production",
+  "provider": "Strata",
+  "inference_config": "config/inference.strata.deepseek.local.json",
+  "additional_inference_configs": [],
+  "manage_engine": true,
+  "service_startup_timeout_seconds": 3630,
+  "execution_timeout_seconds": 3600,
+  "data_directory": ".local/server",
+  "port": 18080,
+  "allowed_hosts": [
+    "127.0.0.1",
+    "localhost",
+    "szzj.nat200.top"
+  ]
+}

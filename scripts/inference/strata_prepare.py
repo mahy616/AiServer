@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "server/src"))
 sys.path.insert(0, str(ROOT / "scripts/server"))
 from manager_support import atomic_write, offline, read_config, resolve
-from aiserver.inference.strata import digest, strict_json, validate_config, StrataProvider, verify_local_files
+from aiserver.inference.strata import digest, strict_json, validate_config, StrataProvider, verify_local_files, is_deepseek
 from aiserver.operations.lock import InstanceLock
 from aiserver.inference.strata import StrataBudget
 from aiserver.inference.contracts import TaskInput
@@ -41,6 +41,7 @@ def download_once(url, target, sha256, size):
     import requests
     target = Path(target)
     if target.exists():
+        print("Checking SHA256: " + target.name, flush=True)
         if target.stat().st_size == size and digest(target) == sha256:
             return target
         raise ValueError("Existing artifact does not match pinned SHA256: " + target.name)
@@ -62,12 +63,19 @@ def download_once(url, target, sha256, size):
         if response.status_code not in (200, 206):
             raise ValueError("Invalid artifact response")
         count = offset if resume else 0
+        started, progress_at, initial = time.monotonic(), time.monotonic(), count
         with partial.open("ab" if resume else "wb") as stream:
             for block in response.iter_content(4 * 1024**2):
                 count += len(block)
                 if count > size:
                     raise ValueError("Artifact exceeds pinned size")
                 stream.write(block)
+                now = time.monotonic()
+                if now - progress_at >= 5:
+                    speed = (count - initial) / max(.001, now - started)
+                    print(f"  {target.name}: {100*count/size:.1f}% ({count/1e9:.2f}/{size/1e9:.2f} GB), {speed/1024**2:.1f} MiB/s", flush=True)
+                    progress_at = now
+    print("Checking SHA256: " + target.name, flush=True)
     if count != size or digest(partial) != sha256:
         raise ValueError("Artifact SHA256/size mismatch: " + target.name)
     os.replace(partial, target)
@@ -202,14 +210,19 @@ async def preflight(settings, cfg, identity):
     try:
         await provider.start()
         profile = type("PreparationProfile", (), {"profile_id": "strata-preflight"})()
+        question = "What is the capital of France? Answer in one short English sentence." if is_deepseek(cfg) else "Reply with OK."
         check = await StrataBudget(cfg).prepare(TaskInput(json.dumps({"messages": [{"role": "user", "content": [
-            {"type": "text", "text": "Reply with OK."}]}], "options": {"num_predict": 32}, "think": False}), ()), profile)
+            {"type": "text", "text": question}]}], "options": {"num_predict": 64}, "think": False}), ()), profile)
+        if check.code:
+            raise ValueError(check.code)
         seen = []
         async def delta(text, channel="content"):
             seen.append(text)
         output = await provider.generate(check.prepared, asyncio.Event(), delta)
         if not seen or output.output_tokens == 0:
             raise ValueError("Strata produced no verification tokens")
+        if is_deepseek(cfg) and ("paris" not in output.text.lower() or not output.is_complete):
+            raise ValueError("DeepSeek failed its known-answer generation; configuration was not published")
     finally:
         await provider.aclose()
 
@@ -217,34 +230,50 @@ async def preflight(settings, cfg, identity):
 def prepare(args):
     if os.name != "nt" or sys.maxsize <= 2**32:
         raise ValueError("The pinned Strata v1 runtime requires 64-bit Windows")
-    source = json.loads((ROOT / "config/models/strata.source.json").read_text(encoding="utf-8"))
+    deepseek = getattr(args, "family", "qwen") == "deepseek"
+    suffix = ".deepseek" if deepseek else ""
+    source = json.loads((ROOT / ("config/models/strata" + suffix + ".source.json")).read_text(encoding="utf-8"))
     base_path = resolve(ROOT, args.server_config)
     base, base_bytes = read_config(base_path)
-    output_server = ROOT / "config/server.strata.local.json"
+    output_server = ROOT / ("config/server.strata" + suffix + ".local.json")
     if base_path == output_server and base.get("provider") != "Strata":
         raise ValueError("Strata output must not overwrite an Ollama configuration")
-    cfg_path = ROOT / "config/inference.strata.local.json"
+    cfg_path = ROOT / ("config/inference.strata" + suffix + ".local.json")
     cfg_original = cfg_path.read_bytes() if cfg_path.exists() else None
     cfg = strict_json(cfg_original.decode("utf-8-sig")) if cfg_original is not None else json.loads(
-        (ROOT / "config/inference.strata.example.json").read_text(encoding="utf-8"))
+        (ROOT / ("config/inference.strata" + suffix + ".example.json")).read_text(encoding="utf-8"))
+    if is_deepseek(cfg) != deepseek:
+        raise ValueError("The selected installation entry does not match this model family")
     cfg["ExecutablePath"] = str(Path(sys.executable).resolve())
     if args.context is not None:
         cfg["NumCtx"] = args.context
+    if getattr(args, "max_output", None) is not None:
+        cfg["NumPredict"] = args.max_output
+        if "MaxOutputTokens" in cfg:
+            cfg["MaxOutputTokens"] = args.max_output
     validate_config(cfg)
     if cfg["EngineVersion"] != source["engine_version"] or cfg["RuntimeVersion"] != source["release"]:
         raise ValueError("Strata configuration does not match the pinned release")
     validate_settings = {**base, "provider": "Strata", "manage_engine": True, "additional_inference_configs": [],
-        "inference_config": str(cfg_path), "service_startup_timeout_seconds": 930}
+        "inference_config": str(cfg_path), "service_startup_timeout_seconds": cfg["StartupTimeoutSeconds"] + 30,
+        "execution_timeout_seconds": cfg["GenerateTimeoutSeconds"]}
     server_original = None
     if output_server.exists():
         validate_settings, server_original = read_config(output_server)
         if validate_settings.get("provider") != "Strata":
             raise ValueError("Existing output is not a Strata configuration")
+    validate_settings["service_startup_timeout_seconds"] = max(
+        validate_settings.get("service_startup_timeout_seconds", 90), cfg["StartupTimeoutSeconds"] + 30)
     if resolve(ROOT, validate_settings["inference_config"]) != cfg_path:
-        raise ValueError("Strata output must use config/inference.strata.local.json")
+        raise ValueError("Strata output must use " + cfg_path.name)
     targets = (resolve(ROOT, cfg["RunConfigPath"]), resolve(ROOT, cfg["ModelLockPath"]), cfg_path, output_server)
     if len(set(targets)) != 4 or base_path in targets[:3]:
         raise ValueError("Strata output paths must be distinct from the base service configuration")
+    other_path = ROOT / ("config/inference.strata" + ("" if deepseek else ".deepseek") + ".local.json")
+    if other_path.exists():
+        other = strict_json(other_path.read_text(encoding="utf-8-sig"))
+        if set(targets) & {resolve(ROOT, other[k]) for k in ("RunConfigPath", "ModelLockPath")}:
+            raise ValueError("Qwen and DeepSeek must use independent run configurations and identity locks")
     expected = {p: p.read_bytes() if p.exists() else None for p in targets}
     expected[cfg_path], expected[output_server] = cfg_original, server_original
     settings = Settings(**{**validate_settings,
@@ -264,19 +293,28 @@ def prepare(args):
                     raise ValueError("Finish existing jobs before changing the inference backend")
         cache = ROOT / ".local/strata/downloads"
         home = ROOT / ".local/apps/strata/v0.2.9"
-        for name in ("source", "engine", "gguf"):
+        engine_folder = home / ("engine-dsv41" if deepseek else "engine")
+        source_folder = home / ("deepseek-source" if deepseek else "source")
+        for name, asset in source["artifacts"].items():
             asset = source["artifacts"][name]
             print("Preparing " + name + " (fixed SHA256)", flush=True)
             archive = download(asset["url"], cache / asset["filename"], asset["sha256"], asset["size"])
-            unpack(archive, home / name, asset["sha256"], include=asset.get("include"))
-        runtime = home / "source/Strata-0.2.9"
+            output = source_folder if name == "source" else engine_folder if name == "engine" else home / name
+            unpack(archive, output, asset["sha256"], include=asset.get("include"))
+        runtime = source_folder / "Strata-0.2.9"
         if (digest(runtime / "requirements.txt") != source["requirements_sha256"] or
-                digest(runtime / "tools/mtp_fetch.py") != source["mtp_fetch_sha256"]):
+                not deepseek and digest(runtime / "tools/mtp_fetch.py") != source["mtp_fetch_sha256"]):
             raise ValueError("Pinned upstream preparation scripts differ")
-        engines = list((home / "engine").rglob("strata.exe"))
+        engines = list(engine_folder.rglob("strata-dsv41.exe" if deepseek else "strata.exe"))
         if len(engines) != 1:
-            raise ValueError("Pinned engine archive must contain exactly one strata.exe")
-        gguf = home / ("gguf/llama.cpp-" + source["gguf_revision"]) / "gguf-py"
+            raise ValueError("Pinned engine archive must contain exactly one model-family executable")
+        if deepseek:
+            if (digest(runtime / "tools/dsv41/pack_gguf.py") != source["pack_script_sha256"] or
+                    digest(runtime / "data/dsv41/profile-2.00.bin") != source["expert_profile_sha256"] or
+                    digest(engines[0].parent / "engine-component.json") != source["artifacts"]["engine"]["manifest_sha256"] or
+                    strict_json((engines[0].parent / "BUILD.json").read_bytes()).get("version") != cfg["EngineVersion"]):
+                raise ValueError("Pinned DeepSeek engine or preparation scripts differ")
+        gguf = None if deepseek else home / ("gguf/llama.cpp-" + source["gguf_revision"]) / "gguf-py"
         requirement_path = ROOT / "scripts/inference/strata.requirements.txt"
         requirement_hash = digest(requirement_path)
         dependency = home / "dependencies" / requirement_hash[:16]
@@ -291,11 +329,15 @@ def prepare(args):
             raise ValueError("Strata dependencies are missing; use --install-dependencies")
         cfg.update(RuntimePath=str(runtime), DependencyPath=str(dependency), EnginePath=str(engines[0]))
         env = os.environ.copy()
-        env.update(PYTHONPATH=os.pathsep.join([str(dependency), str(runtime)]), PYTHONNOUSERSITE="1", PYTHONUTF8="1",
-            STRATA_GGUF_PY=str(gguf), STRATA_MTP_REVISION=source["mtp_revision"], STRATA_ALLOW_UNPINNED="0")
+        env.update(PYTHONPATH=os.pathsep.join([str(dependency), str(runtime)]), PYTHONNOUSERSITE="1", PYTHONUTF8="1", STRATA_ALLOW_UNPINNED="0")
+        if not deepseek:
+            env.update(STRATA_GGUF_PY=str(gguf), STRATA_MTP_REVISION=source["mtp_revision"])
         env.pop("STRATA_SOURCE", None)
         run([sys.executable, "-s", "-c", "import numpy,jinja2,regex,psutil,requests,PIL,yaml"], cwd=runtime, env=env, log=work/"dependencies.log")
-        model_dir = ROOT / ".local/strata/models/IQ3_XXS"
+        run([sys.executable, "-s", str(runtime / "serve/server.py"), "--help"], cwd=runtime, env=env, log=work/"runtime-check.log")
+        if deepseek:
+            run([str(engines[0]), "--version"], cwd=runtime, env=env, log=work/"runtime-check.log")
+        model_dir = ROOT / (".local/strata/models/deepseek41/IQ2_XXS" if deepseek else ".local/strata/models/IQ3_XXS")
         model_dir.mkdir(parents=True, exist_ok=True)
         missing_bytes = sum(max(0, row["size"] - ((model_dir / (row["filename"] + ".download")).stat().st_size
             if (model_dir / (row["filename"] + ".download")).exists() else 0))
@@ -322,33 +364,69 @@ def prepare(args):
         prepared_set = ROOT / ".local/strata/prepared" / work.name
         prepared_set.mkdir(parents=True)
         pack = prepared_set / "pack"
-        # The native pack indexes experts in place; it does not write another 43 GB expert pool.
-        run([sys.executable, "-s", str(runtime/"tools/iq_pack.py"), "--gguf", str(native), "--out", str(pack)], cwd=runtime, env=env, log=work/"prepare.log")
-        mtp_source = ROOT / ".local/strata/mtp-source"
-        mtp = prepared_set / "mtp"
-        mtp_gguf = prepared_set / "mtp-q2_0.gguf"
-        for tool, values in (("mtp_fetch.py", ["fetch", "--out", str(mtp_source)]),
-                ("mtp_fetch.py", ["verify", "--out", str(mtp_source)]),
-                ("mtp_pack.py", ["--src", str(mtp_source), "--experts", "q2_0", "--out", str(mtp_gguf)]),
-                ("mtp_rt.py", ["--gguf", str(mtp_gguf), "--out", str(mtp)])):
-            print("Preparing " + tool, flush=True)
-            run([sys.executable, "-s", str(runtime/"tools"/tool), *values], cwd=runtime, env=env, log=work/"prepare.log")
-        libs = sorted({str(p.parent) for p in (home/"engine").rglob("*.dll")})
-        run_config = {"exe": str(engines[0]), "cwd": str(runtime), "lib_dirs": libs, "max_queue": 1,
-            "tokenizer": str(pack/"tokenizer"), "model_name": cfg["Model"], "host": "127.0.0.1", "parallel": 1,
-            "mtp": True, "drafting": "mtp", "lazy_load": False, "idle_unload_s": 0, "open_browser": False,
-            "api_monitor": False, "fit_max_tokens": False, "answer_room": False, "tool_call_recovery": False,
-            "reasoning_close_retry": False, "reasoning_loop_recovery": False, "engine_ready_s": 900,
-            "args": ["--pack", str(pack), "--native", str(native), "--ple-gguf", str(model_dir/source["model_files"][1]["filename"]),
-                "--expert-profile", str(runtime/"data/expert-profile.bin"), "--expert-cache", "auto", "--prefill", "4096",
-                "--spec", "4", "--spec-min-p", "0.5", "--mtp", str(mtp), "--max-context", str(cfg["NumCtx"]),
-                "--kv", "int8", "--kv-resident", "32768", "--vram-reserve-mib", "1536"]}
+        if deepseek:
+            if (digest(runtime / "tools/dsv41/pack_gguf.py") != source["pack_script_sha256"] or
+                    digest(runtime / "data/dsv41/profile-2.00.bin") != source["expert_profile_sha256"]):
+                raise ValueError("Pinned DeepSeek preparation scripts differ")
+            roles = {role: [model_dir / row["filename"] for row in source["model_files"] if row["role"] == role]
+                     for role in ("backbone", "engram", "metadata", "draft")}
+            if [len(roles[r]) for r in roles] != [4, 1, 1, 1]:
+                raise ValueError("DeepSeek requires four IQ2_XXS shards, Engram, metadata and DSpark")
+            run([sys.executable, "-s", str(runtime / "tools/dsv41/pack_gguf.py"),
+                "--model", str(model_dir), "--shards", *[p.name for p in roles["backbone"]],
+                "--engram", str(roles["engram"][0]), "--engram-meta", str(roles["metadata"][0]),
+                "--dspark-gguf", str(roles["draft"][0]), "--dspark-noise-token", "128799",
+                "--dspark-markov-rank", "256", "--out", str(pack)], cwd=runtime, env=env, log=work/"prepare.log")
+            shutil.copyfile(runtime / "data/dsv41/profile-2.00.bin", pack / "expert-profile.bin")
+            # Use the same canonical V4.1 DSML template that the pinned server selects.
+            # This also makes the actual rendered template's hash unambiguous at startup.
+            template = pack / "tokenizer/chat_template.jinja"
+            if " calls>" not in template.read_text(encoding="utf-8"):
+                shutil.copyfile(runtime / "serve/fixtures/deepseek41/chat_template.jinja", template)
+            libs = sorted({str(p.parent) for p in engine_folder.rglob("*.dll")})
+            env["PATH"] = os.pathsep.join([str(engines[0].parent), *libs, env.get("PATH", "")])
+            run([str(engines[0]), "--pack", str(pack), "--pack-info"], cwd=runtime, env=env, log=work/"pack-info.log")
+            run_config = {"exe": str(engines[0]), "cwd": str(runtime), "lib_dirs": libs, "arch": "deepseek41", "max_queue": 1,
+                "env": {"STRATA_DS4_SLOT_KEEP": "0", "STRATA_DS4_AUTO_PIN": "0"},
+                "tokenizer": str(pack / "tokenizer"), "model_name": cfg["Model"], "host": "127.0.0.1", "parallel": 1,
+                "lazy_load": False, "idle_unload_s": 0, "open_browser": False, "api_monitor": False,
+                "fit_max_tokens": False, "answer_room": False, "tool_call_recovery": False,
+                "reasoning_close_retry": False, "reasoning_loop_recovery": False, "engine_ready_s": cfg["StartupTimeoutSeconds"],
+                "args": ["--pack", str(pack), "--max-context", str(cfg["NumCtx"]), "--eos", "1", "--vision", "off",
+                    "--dspark", cfg["DraftMode"], "--dspark-conf", "0.65", "--experts", str(cfg["ActiveExperts"])]}
+            native = pack
+            artifact_folders = (runtime, engine_folder, dependency, pack)
+        else:
+            # The native pack indexes experts in place; it does not write another 43 GB expert pool.
+            run([sys.executable, "-s", str(runtime/"tools/iq_pack.py"), "--gguf", str(native), "--out", str(pack)], cwd=runtime, env=env, log=work/"prepare.log")
+            mtp_source = ROOT / ".local/strata/mtp-source"
+            mtp = prepared_set / "mtp"
+            mtp_gguf = prepared_set / "mtp-q2_0.gguf"
+            for tool, values in (("mtp_fetch.py", ["fetch", "--out", str(mtp_source)]),
+                    ("mtp_fetch.py", ["verify", "--out", str(mtp_source)]),
+                    ("mtp_pack.py", ["--src", str(mtp_source), "--experts", "q2_0", "--out", str(mtp_gguf)]),
+                    ("mtp_rt.py", ["--gguf", str(mtp_gguf), "--out", str(mtp)])):
+                print("Preparing " + tool, flush=True)
+                run([sys.executable, "-s", str(runtime/"tools"/tool), *values], cwd=runtime, env=env, log=work/"prepare.log")
+            libs = sorted({str(p.parent) for p in engine_folder.rglob("*.dll")})
+            run_config = {"exe": str(engines[0]), "cwd": str(runtime), "lib_dirs": libs, "max_queue": 1,
+                "tokenizer": str(pack/"tokenizer"), "model_name": cfg["Model"], "host": "127.0.0.1", "parallel": 1,
+                "mtp": True, "drafting": "mtp", "lazy_load": False, "idle_unload_s": 0, "open_browser": False,
+                "api_monitor": False, "fit_max_tokens": False, "answer_room": False, "tool_call_recovery": False,
+                "reasoning_close_retry": False, "reasoning_loop_recovery": False, "engine_ready_s": cfg["StartupTimeoutSeconds"],
+                "args": ["--pack", str(pack), "--native", str(native), "--ple-gguf", str(model_dir/source["model_files"][1]["filename"]),
+                    "--expert-profile", str(runtime/"data/expert-profile.bin"), "--expert-cache", "auto", "--prefill", "4096",
+                    "--spec", "4", "--spec-min-p", "0.5", "--mtp", str(mtp), "--max-context", str(cfg["NumCtx"]),
+                    "--kv", "int8", "--kv-resident", "32768", "--vram-reserve-mib", "1536"]}
+            artifact_folders = (runtime, engine_folder, gguf, dependency, pack, mtp)
+        run_config["log"] = str(work / "engine-native.log")
         run_bytes = json_bytes(run_config)
         files = [file_record(model_dir/row["filename"], expected=row["sha256"]) for row in source["model_files"]]
-        for folder in (runtime, home/"engine", gguf, dependency, pack, mtp):
+        for folder in artifact_folders:
             files.extend(file_record(p) for p in folder.rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix not in (".pyc", ".log"))
         identity = {"provider": "Strata", "model": cfg["Model"], "engine_version": cfg["EngineVersion"],
-            "release": source["release"], "native_path": str(native), "files": files,
+            "release": source["release"], "family": cfg.get("ModelFamily", "qwen4exp"),
+            "engine_model_path": str(native), "files": files,
             "run_config_sha256": hashlib.sha256(run_bytes).hexdigest(),
             "chat_template_sha256": digest(pack/"tokenizer/chat_template.jinja")}
         temporary_run = work / "run.local.json"

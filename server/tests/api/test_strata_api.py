@@ -13,8 +13,10 @@ from test_fake_api import service
 
 
 @pytest.mark.parametrize("stream", [False, True])
-def test_strata_tool_round_trip_preserves_protocol(tmp_path, stream):
-    cfg = json.loads((ROOT / "config/inference.strata.example.json").read_bytes())
+@pytest.mark.parametrize("family", ["qwen", "deepseek"])
+def test_strata_tool_round_trip_preserves_protocol(tmp_path, stream, family):
+    filename = "inference.strata.deepseek.example.json" if family == "deepseek" else "inference.strata.example.json"
+    cfg = json.loads((ROOT / "config" / filename).read_bytes())
     profile = Profile("test-strata", "Strata", json.dumps({"config": cfg, "capacityMethod": "conservative-estimate-v1"}), ("text",))
     provider = StrataProvider(Settings(data_directory=tmp_path, provider="Strata"), cfg, {})
     provider.start = AsyncMock()

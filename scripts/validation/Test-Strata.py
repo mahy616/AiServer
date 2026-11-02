@@ -33,11 +33,43 @@ def resources():
     return result
 
 
-async def verify(settings, long_context, destination):
+async def tool_roundtrip(provider, budget, profile):
+    messages = [{"role": "user", "content": [{"type": "text", "text":
+        "Use read_sample to read sample.txt, then repeat its returned marker exactly."}]}]
+    tools = [{"type": "function", "function": {"name": "read_sample", "description": "Read the requested sample file",
+        "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}}]
+    async def ignore(text, channel="content"):
+        pass
+    async def generate(choice):
+        request = {"protocol": "openai-chat-v1", "messages": messages, "tools": tools, "think": False,
+            "tool_choice": choice, "parallel_tool_calls": False, "options": {"num_predict": min(512, budget.cfg["NumPredict"])}}
+        check = await budget.prepare(TaskInput(json.dumps(request), ()), profile)
+        if check.code:
+            raise ValueError(check.code)
+        return await provider.generate(check.prepared, asyncio.Event(), ignore)
+    first = await generate("required")
+    if not first.is_complete or len(first.tool_calls) != 1:
+        raise ValueError("Model did not return one complete native tool call")
+    call = first.tool_calls[0]
+    if call["function"]["name"] != "read_sample" or json.loads(call["function"]["arguments"]) != {"path": "sample.txt"}:
+        raise ValueError("Model returned incorrect sample tool arguments")
+    messages.extend([{"role": "assistant", "content": [{"type": "text", "text": first.text}],
+        "reasoning_content": first.reasoning_text, "tool_calls": [{**call, "function": {
+            **call["function"], "arguments": json.loads(call["function"]["arguments"])}}]},
+        {"role": "tool", "tool_call_id": call["id"], "content": [{"type": "text", "text": "STRATA_TOOL_OK_42"}]}])
+    second = await generate("none")
+    if not second.is_complete or second.tool_calls or "STRATA_TOOL_OK_42" not in second.text:
+        raise ValueError("Model did not consume the associated tool result")
+    return {"passed": True, "requests": 2, "scope": "synthetic tool result; no client files read or written"}
+
+
+async def verify(settings, long_context, destination, *, benchmark=False):
     cfg, identity, profile = load_strata_profile(settings)
     provider, budget = StrataProvider(settings, cfg, identity), StrataBudget(cfg)
-    report = {"model": cfg["Model"], "context": cfg["NumCtx"], "checks": [], "passed": False,
-              "scope": "load/protocol/stop-recovery; no business-quality or full-16K-output acceptance", "before": resources()}
+    report = {"model": cfg["Model"], "context": cfg["NumCtx"], "max_output": cfg["NumPredict"],
+              "active_experts": cfg.get("ActiveExperts"), "draft_mode_configured": cfg.get("DraftMode", "MTP"),
+              "checks": [], "passed": False,
+              "scope": "load/protocol/tools/stop-recovery; no business-quality or full-16K-output acceptance", "before": resources()}
     try:
         started = time.monotonic()
         await provider.start()
@@ -52,11 +84,16 @@ async def verify(settings, long_context, destination):
             if check.code:
                 raise ValueError(check.code)
             counts = {"content": 0, "reasoning_content": 0}
+            first_delta = None
             async def delta(value, channel="content"):
+                nonlocal first_delta
+                if first_delta is None:
+                    first_delta = time.monotonic()
                 counts[channel] += len(value)
             started = time.monotonic()
             output = await provider.generate(check.prepared, asyncio.Event(), delta)
             row = {"thinking": thinking, "elapsed_seconds": time.monotonic()-started, "characters": counts,
+                "first_delta_seconds": first_delta-started if first_delta is not None else None,
                 "prompt_tokens": output.input_tokens, "output_tokens": output.output_tokens,
                 "finish_reason": output.finish_reason, "complete": output.is_complete, "resources": resources()}
             row["passed"] = sum(counts.values()) > 0 and (not long_context or
@@ -64,16 +101,41 @@ async def verify(settings, long_context, destination):
             report["checks"].append(row)
             if not row["passed"]:
                 raise ValueError("Smoke check did not meet its declared scope")
+        report["tools"] = await tool_roundtrip(provider, budget, profile)
+        if benchmark:
+            task = TaskInput(json.dumps({"protocol": "openai-chat-v1", "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "Write only a C# static method named Mean(double[] values) that returns the mean, checks null and throws ArgumentException for an empty input. Do not use LINQ."}]}],
+                "think": False, "options": {"num_predict": min(512, cfg["NumPredict"])}}), ())
+            check = await budget.prepare(task, profile)
+            if check.code:
+                raise ValueError(check.code)
+            first_delta = None
+            async def code_delta(value, channel="content"):
+                nonlocal first_delta
+                if first_delta is None:
+                    first_delta = time.monotonic()
+            started = time.monotonic()
+            output = await provider.generate(check.prepared, asyncio.Event(), code_delta)
+            elapsed = time.monotonic()-started
+            report["code_sample"] = {"elapsed_seconds": elapsed, "first_delta_seconds": first_delta-started if first_delta else None,
+                "input_tokens": output.input_tokens, "output_tokens": output.output_tokens,
+                "end_to_end_tokens_per_second": output.output_tokens/elapsed if type(output.output_tokens) is int else None,
+                "complete": output.is_complete, "finish_reason": output.finish_reason,
+                "nonempty": bool(output.text), "resources": resources(), "compiled_or_quality_checked": False}
+            if not output.is_complete or not output.text:
+                raise ValueError("Code generation sample was empty or truncated")
         # Cancel an owned live generation, then require real idle/owned restart before another request.
         task = TaskInput(json.dumps({"messages": [{"role": "user", "content": [{"type": "text", "text": "Count upwards for a long time."}]}],
-            "options": {"num_predict": 4096}, "think": True}), ())
+            "options": {"num_predict": min(4096, cfg["NumPredict"])}, "think": True}), ())
         check = await budget.prepare(task, profile)
+        if check.code:
+            raise ValueError(check.code)
         first = asyncio.Event()
         async def on_first(text, channel="content"):
             first.set()
         running = asyncio.create_task(provider.generate(check.prepared, asyncio.Event(), on_first))
         try:
-            await asyncio.wait_for(first.wait(), 120)
+            await asyncio.wait_for(first.wait(), min(600, cfg["GenerateTimeoutSeconds"]))
         finally:
             running.cancel()
             try:
@@ -98,20 +160,57 @@ async def verify(settings, long_context, destination):
     return report["passed"]
 
 
+def run_one(config_path, long_context, output, *, benchmark=False):
+    try:
+        settings = Settings.load(str(config_path))
+        if settings.provider != "Strata":
+            raise ValueError("Select a Strata service configuration")
+        with InstanceLock(settings.data_directory):
+            if benchmark:
+                return asyncio.run(verify(settings, long_context, output, benchmark=True))
+            return asyncio.run(verify(settings, long_context, output))
+    except Exception as error:
+        output.write_text(json.dumps({"passed": False, "config": str(config_path),
+            "error": type(error).__name__ + ": " + str(error)}, ensure_ascii=False, indent=2), encoding="utf-8")
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--server-config", default=str(ROOT / "config/server.strata.local.json"))
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument("--server-config")
+    choice.add_argument("--all", action="store_true", help="Test Qwen and DeepSeek sequentially; both must be prepared and AiServer stopped")
     parser.add_argument("--long-context", action="store_true", help="Also test a near-window synthetic prompt; can take several minutes")
+    parser.add_argument("--benchmark", action="store_true", help="Compare a fixed C# generation sample; does not compile or judge business quality")
+    parser.add_argument("--pause", action="store_true")
     args = parser.parse_args()
-    settings = Settings.load(args.server_config)
-    if settings.provider != "Strata":
-        parser.error("Select a Strata service configuration")
-    output = ROOT / ".local/strata/validation" / (uuid4().hex + ".json")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with InstanceLock(settings.data_directory):
-        passed = asyncio.run(verify(settings, args.long_context, output))
-    print(("PASS" if passed else "FAIL") + ": " + str(output))
-    return 0 if passed else 1
+    try:
+        directory = ROOT / ".local/strata/validation" / uuid4().hex
+        directory.mkdir(parents=True)
+        selected = [("qwen", ROOT / "config/server.strata.local.json"), ("deepseek", ROOT / "config/server.strata.deepseek.local.json")] if args.all else [
+            ("selected", Path(args.server_config) if args.server_config else ROOT / "config/server.strata.local.json")]
+        results = {}
+        for name, config_path in selected:
+            output = directory / (name + ".json")
+            print("Testing " + name + ": " + str(config_path), flush=True)
+            try:
+                passed = run_one(config_path, args.long_context, output, benchmark=args.benchmark)
+                result = json.loads(output.read_text(encoding="utf-8")) if output.exists() else {"passed": passed}
+                result["passed"] = passed
+            except Exception as error:
+                result = {"passed": False, "error": type(error).__name__ + ": " + str(error)}
+                if not args.all:
+                    raise
+            results[name] = result
+            print(("PASS" if result["passed"] else "FAIL") + ": " + str(output), flush=True)
+        summary = {"passed": all(v["passed"] for v in results.values()), "models": results,
+            "resource_scope": "host snapshots, not measured peaks", "business_quality_accepted": False}
+        (directory / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("Summary: " + str(directory / "summary.json"), flush=True)
+        return 0 if summary["passed"] else 1
+    finally:
+        if args.pause:
+            input("Press Enter to close...")
 
 
 if __name__ == "__main__":

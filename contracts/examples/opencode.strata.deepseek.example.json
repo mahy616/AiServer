@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "aiserver": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AiServer",
+      "options": {
+        "baseURL": "https://szzj.nat200.top/v1",
+        "apiKey": "{env:AISERVER_API_KEY}",
+        "timeout": 3600000
+      },
+      "models": {
+        "deepseek-v4.1-flash-1017:iq2_xxs": {
+          "name": "DeepSeek V4.1 Flash 1017 IQ2_XXS / 6 experts (Strata)",
+          "tool_call": true,
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 32768,
+            "input": 15872,
+            "output": 16384
+          },
+          "reasoning": true,
+          "options": {
+            "think": false
+          },
+          "variants": {
+            "normal": {
+              "think": false
+            },
+            "thinking": {
+              "think": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "model": "aiserver/deepseek-v4.1-flash-1017:iq2_xxs",
+  "compaction": {
+    "auto": true,
+    "reserved": 10000,
+    "prune": true
+  },
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}

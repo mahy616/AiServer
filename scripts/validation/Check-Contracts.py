@@ -59,7 +59,7 @@ def main():
             Draft202012Validator(inline_schema, format_checker=FormatChecker()).validate(json.loads(content))
 
     openai = json.loads((api / "openai-responses.schema.json").read_text(encoding="utf-8"))
-    for name in ("openai-tool-request", "openai-tool-result-request", "openai-reasoning-request", "openai-gptoss-request", "openai-strata-request"):
+    for name in ("openai-tool-request", "openai-tool-result-request", "openai-reasoning-request", "openai-gptoss-request", "openai-strata-request", "openai-strata-deepseek-request"):
         ChatValidator(api).validate((samples / (name + ".json")).read_bytes())
     Draft202012Validator(dict(openai, **{"$ref": "#/$defs/completion"})).validate(
         json.loads((samples / "openai-tool-response.json").read_text(encoding="utf-8")))
@@ -107,6 +107,13 @@ def main():
     assert entry["variants"] == {"normal": {"think": False}, "thinking": {"think": True}}
     assert entry["tool_call"] and entry["reasoning"] and entry["modalities"]["input"] == ["text"]
     assert strata_client["provider"]["aiserver"]["options"]["apiKey"] == "{env:AISERVER_API_KEY}"
+    deepseek = json.loads((ROOT / "config/inference.strata.deepseek.example.json").read_bytes())
+    deepseek_client = json.loads((samples / "opencode.strata.deepseek.example.json").read_bytes())
+    entry = deepseek_client["provider"]["aiserver"]["models"][deepseek["Model"]]
+    assert entry["limit"] == {"context": deepseek["NumCtx"], "input": deepseek["NumCtx"]-deepseek["NumPredict"]-deepseek["ReservedTokens"], "output": deepseek["NumPredict"]}
+    assert entry["variants"] == {"normal": {"think": False}, "thinking": {"think": True}}
+    assert entry["tool_call"] and entry["reasoning"] and entry["modalities"]["input"] == ["text"]
+    assert deepseek_client["provider"]["aiserver"]["options"]["apiKey"] == "{env:AISERVER_API_KEY}"
     for filename in ("opencode.example.json", "opencode.multimodel.example.json"):
         options = json.loads((samples / filename).read_text(encoding="utf-8"))["provider"]["aiserver"]["options"]
         assert options["apiKey"] == "{env:AISERVER_API_KEY}", "Public config must reference the personal API key"

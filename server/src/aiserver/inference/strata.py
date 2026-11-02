@@ -48,6 +48,14 @@ def strict_json(raw):
     return json.loads(raw, object_pairs_hook=pairs, parse_constant=constant, parse_float=number)
 
 
+def is_deepseek(cfg):
+    return cfg.get("ModelFamily", "qwen4exp") == "deepseek41"
+
+
+def identity_model_path(identity):
+    return identity.get("engine_model_path", identity.get("native_path"))
+
+
 def validate_config(cfg):
     validate_window(cfg)
     generation_defaults(cfg)
@@ -55,11 +63,16 @@ def validate_config(cfg):
     if (uri.scheme != "http" or uri.hostname != "127.0.0.1" or not uri.port or
             uri.username or uri.password or uri.query or uri.fragment or uri.path not in ("", "/")):
         raise ValueError("Strata requires local loopback HTTP")
-    if (cfg.get("Provider") != "Strata" or cfg.get("ExpectedQuantization") != "IQ3_XXS" or
+    family = cfg.get("ModelFamily", "qwen4exp")
+    quant = "IQ2_XXS" if is_deepseek(cfg) else "IQ3_XXS"
+    if (family not in ("qwen4exp", "deepseek41") or cfg.get("Provider") != "Strata" or cfg.get("ExpectedQuantization") != quant or
             cfg.get("EngineVersion") != "0.1.55" or cfg.get("RuntimeVersion") != "0.2.9" or
             cfg.get("NumParallel") != 1 or cfg.get("MaxLoadedModels") != 1 or cfg.get("EngineMaxQueue") != 1 or
             cfg.get("ImagePolicy", {}).get("MaxImages") != 0 or cfg.get("Budget", {}).get("Method") != "conservative-estimate-v1"):
-        raise ValueError("Strata v1 requires one text-only IQ3_XXS model")
+        raise ValueError("Strata requires one text-only Qwen IQ3_XXS or DeepSeek IQ2_XXS model")
+    if is_deepseek(cfg) and (type(cfg.get("ActiveExperts")) is not int or cfg["ActiveExperts"] not in (5, 6) or
+                             cfg.get("DraftMode") != "auto"):
+        raise ValueError("DeepSeek requires explicit active experts and DSpark auto")
     for key in ("GenerateTimeoutSeconds", "ConnectTimeoutSeconds", "StartupTimeoutSeconds", "MaxResponseBytes"):
         if type(cfg[key]) not in (int, float) or not 0 < cfg[key] <= 86400 * 1024:
             raise ValueError("Invalid Strata resource limit")
@@ -86,18 +99,30 @@ def verify_local_files(cfg, identity):
             raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
     run = strict_json(path_of(cfg["RunConfigPath"]).read_bytes())
     args = run.get("args", [])
-    required_files = {path_of(cfg["EnginePath"]), path_of(cfg["RuntimePath"]) / "serve/server.py",
-                      path_of(identity["native_path"])}
+    model_path = path_of(identity_model_path(identity))
+    required_files = {path_of(cfg["EnginePath"]), path_of(cfg["RuntimePath"]) / "serve/server.py"}
+    required_files.update({model_path / "ds4.txt", model_path / "tensors.txt", model_path / "engram.bin"}
+                          if is_deepseek(cfg) else {model_path})
     if (not required_files.issubset({path_of(row["path"]) for row in files}) or
             path_of(run["exe"]) != path_of(cfg["EnginePath"]) or
             path_of(run["cwd"]) != path_of(cfg["RuntimePath"]) or
-            path_of(args[args.index("--native") + 1]) != path_of(identity["native_path"])):
+            path_of(args[args.index("--pack" if is_deepseek(cfg) else "--native") + 1]) != model_path):
         raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
     if (run.get("fit_max_tokens") is not False or run.get("parallel", 1) != 1 or run.get("max_queue") != 1 or
-            run.get("model_name") != cfg["Model"] or run.get("mtp") is not True or
+            run.get("model_name") != cfg["Model"] or
             run.get("host") != "127.0.0.1" or run.get("lazy_load", False) or
             str(cfg["NumCtx"]) != args[args.index("--max-context") + 1] or
-            "--mtp" not in args or "--batch" in args or "--batch-groups" in args):
+            "--batch" in args or "--batch-groups" in args):
+        raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+    if is_deepseek(cfg):
+        if (identity.get("family") != "deepseek41" or run.get("arch") != "deepseek41" or
+                run.get("env", {}).get("STRATA_DS4_SLOT_KEEP") != "0" or
+                run.get("env", {}).get("STRATA_DS4_AUTO_PIN") != "0" or
+                args[args.index("--experts") + 1] != str(cfg["ActiveExperts"]) or
+                args[args.index("--vision") + 1] != "off" or args[args.index("--dspark") + 1] != cfg["DraftMode"] or
+                "--native" in args or "--mtp" in args):
+            raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+    elif run.get("mtp") is not True or "--mtp" not in args or run.get("arch", "qwen4exp") != "qwen4exp":
         raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
     if identity.get("run_config_sha256") != digest(path_of(cfg["RunConfigPath"])):
         raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
@@ -289,6 +314,7 @@ class StrataAdapter:
             ids.add(call["id"])
             accepted.append(call)
         if (len(accepted) > 1 and not prompt.parallel_tool_calls or
+                prompt.tool_choice == "none" and accepted or
                 finished == "tool_calls" and not accepted or
                 finished == "stop" and accepted):
             raise protocol(True)
@@ -357,9 +383,10 @@ class StrataProvider:
             if (props.get("model_alias") != self.cfg["Model"] or props.get("total_slots") != 1 or
                     props.get("build_info") != "Strata " + self.cfg["EngineVersion"] or props.get("is_sleeping") is not False or
                     props.get("default_generation_settings", {}).get("n_ctx") != self.cfg["NumCtx"] or
-                    path_of(props["model_path"]) != path_of(self.identity["native_path"]) or
+                    path_of(props["model_path"]) != path_of(identity_model_path(self.identity)) or
                     hashlib.sha256(props["chat_template"].encode()).hexdigest() != self.identity["chat_template_sha256"] or
-                    not isinstance(slots, list) or len(slots) != 1 or slots[0].get("n_ctx") != self.cfg["NumCtx"]):
+                    not isinstance(slots, list) or len(slots) != 1 or slots[0].get("n_ctx") != self.cfg["NumCtx"] or
+                    slots[0].get("is_processing") is not False):
                 raise ValueError("Identity differs")
             self.supports_tools = props.get("chat_template_caps", {}).get("supports_tools") is True
             if not self.supports_tools:

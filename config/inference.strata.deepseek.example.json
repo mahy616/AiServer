@@ -1,0 +1,37 @@
+{
+  "Provider": "Strata",
+  "ProfileId": "deepseek41-iq2-32k-full-v1",
+  "EngineVersion": "0.1.55",
+  "RuntimeVersion": "0.2.9",
+  "ExecutablePath": "C:/ProgramData/anaconda3/envs/trt_test_1013/python.exe",
+  "RuntimePath": ".local/apps/strata/v0.2.9/deepseek-source/Strata-0.2.9",
+  "DependencyPath": ".local/apps/strata/v0.2.9/dependencies",
+  "EnginePath": ".local/apps/strata/v0.2.9/engine-dsv41/strata-dsv41.exe",
+  "RunConfigPath": ".local/strata/deepseek/run.local.json",
+  "BaseUrl": "http://127.0.0.1:18081",
+  "Model": "deepseek-v4.1-flash-1017:iq2_xxs",
+  "ExpectedQuantization": "IQ2_XXS",
+  "ModelLockPath": "config/models/strata.deepseek.local.json",
+  "NumCtx": 32768,
+  "NumPredict": 16384,
+  "ReservedTokens": 512,
+  "MaxTextUtf8Bytes": 2097152,
+  "MaxLoadedModels": 1,
+  "NumParallel": 1,
+  "EngineMaxQueue": 1,
+  "ConnectTimeoutSeconds": 5,
+  "GenerateTimeoutSeconds": 3600,
+  "StartupTimeoutSeconds": 3600,
+  "MaxResponseBytes": 8388608,
+  "ImagePolicy": {
+    "MaxImages": 0
+  },
+  "Budget": {
+    "Method": "conservative-estimate-v1",
+    "IsExact": false
+  },
+  "GenerationDefaults": {},
+  "ModelFamily": "deepseek41",
+  "ActiveExperts": 6,
+  "DraftMode": "auto"
+}

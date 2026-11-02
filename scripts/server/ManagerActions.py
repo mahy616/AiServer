@@ -218,7 +218,7 @@ def startup_check(config):
                 probe.settimeout(1)
                 occupied = probe.connect_ex((uri.hostname, uri.port)) == 0
             add(not occupied, "ENGINE_PORT_IN_USE" if occupied else "ENGINE_PORT_FREE",
-                "Strata端口已占用，请从原入口停止实例。" if occupied else "Strata端口空闲；冷加载允许900秒。")
+                "Strata端口已占用，请从原入口停止实例。" if occupied else f'Strata端口空闲；{cfg["Model"]}冷加载允许{cfg["StartupTimeoutSeconds"]}秒。')
         except Exception as error:
             problem = diagnostic(error, "configuration")
             add(False, problem["code"], problem["message"])
