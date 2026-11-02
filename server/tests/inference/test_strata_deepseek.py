@@ -122,10 +122,22 @@ def fixture(tmp_path, monkeypatch, family="deepseek"):
 
 
 @pytest.mark.parametrize("family", ["qwen", "deepseek"])
-def test_complete_preparation_and_failed_repeat_preserve_other_model_and_last_working_set(tmp_path, monkeypatch, family):
+@pytest.mark.parametrize("external_storage", [False, True])
+def test_complete_preparation_and_failed_repeat_preserve_other_model_and_last_working_set(tmp_path, monkeypatch, family, external_storage):
     args, cfg, qwen, before_qwen, before_base, commands = fixture(tmp_path, monkeypatch, family)
+    storage = tmp_path / "selected SSD with spaces" if external_storage else tmp_path / ".local/strata"
+    if external_storage:
+        args.storage_root = storage
+        original_download = install.download
+        def download(url, target, *values):
+            assert Path(target).is_relative_to(storage)
+            with pytest.raises(RuntimeError, match="active instance"):
+                install.InstanceLock(storage / "preparation").acquire()
+            return original_download(url, target, *values)
+        monkeypatch.setattr(install, "download", download)
     report = install.prepare(args)
     assert report["prepared"] and report["context"] == cfg["NumCtx"]
+    assert report["storage_root"] == str(storage)
     assert qwen.read_bytes() == before_qwen
     assert (tmp_path / "config/server.local.json").read_bytes() == before_base
     suffix = ".deepseek" if family == "deepseek" else ""
@@ -133,6 +145,19 @@ def test_complete_preparation_and_failed_repeat_preserve_other_model_and_last_wo
     settings = Settings(provider="Strata", data_directory=tmp_path / "data", inference_config=config)
     saved_cfg, identity, profile = load_strata_profile(settings)
     assert profile.provider == "Strata" and saved_cfg["ExpectedQuantization"] == cfg["ExpectedQuantization"]
+    if external_storage:
+        assert saved_cfg["StorageRoot"] == str(storage)
+        assert Path(saved_cfg["EnginePath"]).is_relative_to(storage / "runtime")
+        assert Path(identity["engine_model_path"]).is_relative_to(storage)
+        assert not (tmp_path / ".local/strata/models").exists()
+        assert not (tmp_path / ".local/strata/prepared").exists()
+        assert not (tmp_path / ".local/apps/strata").exists()
+        if family == "qwen":
+            assert (storage / "mtp-source").is_dir()
+        # A later double-click, without the option, must reuse this model's saved SSD.
+        args.storage_root = None
+        assert install.prepare(args)["storage_root"] == str(storage)
+        saved_cfg, identity, profile = load_strata_profile(settings)
     if family == "deepseek":
         assert any("--pack-info" in cmd for cmd in commands)
     targets = [config, Path(cfg["ModelLockPath"]), Path(cfg["RunConfigPath"]), tmp_path / ("config/server.strata" + suffix + ".local.json")]
@@ -145,6 +170,49 @@ def test_complete_preparation_and_failed_repeat_preserve_other_model_and_last_wo
     assert {p: p.read_bytes() for p in targets} == before
     verify_local_files(saved_cfg, identity)
     assert qwen.read_bytes() == before_qwen
+
+
+@pytest.mark.parametrize("value", ["relative/models", "E:models", ""])
+def test_storage_root_must_be_absolute_before_downloading(tmp_path, monkeypatch, value):
+    args, *_ = fixture(tmp_path, monkeypatch)
+    args.storage_root = value
+    with pytest.raises(ValueError, match="absolute folder"):
+        install.prepare(args)
+    assert not (tmp_path / ".local/strata/downloads").exists()
+
+
+def test_selected_storage_lock_refuses_concurrent_preparation_and_releases_local_lock(tmp_path, monkeypatch):
+    args, *_ = fixture(tmp_path, monkeypatch)
+    args.storage_root = tmp_path / "other SSD"
+    lock = install.InstanceLock(args.storage_root / "preparation").acquire()
+    try:
+        with pytest.raises(RuntimeError, match="active instance"):
+            install.prepare(args)
+        assert not (args.storage_root / "downloads").exists()
+        local = install.InstanceLock(tmp_path / ".local/strata/preparation").acquire()
+        local.release()
+    finally:
+        lock.release()
+
+
+def test_failed_storage_change_keeps_the_original_working_configuration(tmp_path, monkeypatch):
+    args, *_ = fixture(tmp_path, monkeypatch)
+    install.prepare(args)
+    config = tmp_path / "config/inference.strata.deepseek.local.json"
+    settings = Settings(provider="Strata", data_directory=tmp_path / "data", inference_config=config)
+    old_cfg, identity, _ = load_strata_profile(settings)
+    paths = [config, Path(old_cfg["ModelLockPath"]), Path(old_cfg["RunConfigPath"]),
+             tmp_path / "config/server.strata.deepseek.local.json"]
+    before = {p: p.read_bytes() for p in paths}
+    args.storage_root = tmp_path / "new SSD"
+    async def fail(*args):
+        raise ValueError("synthetic storage-change load failure")
+    monkeypatch.setattr(install, "preflight", fail)
+    with pytest.raises(ValueError, match="storage-change"):
+        install.prepare(args)
+    assert {p: p.read_bytes() for p in paths} == before
+    assert "StorageRoot" not in old_cfg
+    verify_local_files(old_cfg, identity)
 
 
 def test_deepseek_rejects_cross_model_output_paths_and_invalid_expert_setting(tmp_path, monkeypatch):

@@ -9,7 +9,7 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 ## 使用入口
 
 - 服务管理：双击根目录 `ServerManager.cmd`，选择本机Python和私有配置，加载后管理服务、账号、配置与备份；“运行监控”查看活跃账号、任务性能与硬件资源。
-- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.11.0增加Strata DeepSeek IQ2_XXS独立准备、运行与双模型测试，保留此前实例锁及Windows长路径修复。
+- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.11.1支持Strata双模型通过`--storage-root`指定SSD目录，保留独立准备、运行、双模型测试及此前安装修复。
 - Strata双模型：停服运行`Install-Strata.cmd`准备Qwen Flash-Next IQ3_XXS／MTP，运行`Install-Strata-DeepSeek.cmd`准备DeepSeek V4.1 Flash 1017 IQ2_XXS／Engram／DSpark。在管理器选择“Strata Qwen”或“Strata DeepSeek”启动；双模型依次验收使用`Test-StrataModels.cmd`。步骤与回退见[运维](docs/正式工程运维.md#0110-strata双模型)，验证边界见[项目进度](docs/项目进度.md)。
 - 5080增加三款模型：停服后双击`Install-ExtraModels.cmd`，逐款下载校验GPT-OSS-20B MXFP4、Gemma 4-12B Q4_K_M、Gemma 4-26B-A4B Q3_K_M，全GPU预检通过后追加注册；也提供三个独立入口。OpenCode选择与测试见[运维](docs/正式工程运维.md#0912-增加gpt-oss与gemma-4)。
 - 5080准备模型：双击`Install-Qwen35.cmd`准备9B；双击`Install-Qwen38.cmd`下载固定版本并全GPU预检；步骤见[运维](docs/正式工程运维.md#5080增加qwen38-27b)。双模型统一16K输出与已有部署迁移见[运维](docs/正式工程运维.md#0911-仅使用9b与27b)。

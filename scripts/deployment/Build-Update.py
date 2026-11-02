@@ -65,6 +65,8 @@ def build(root=ROOT, output=None):
         "   首次会下载固定引擎、IQ3_XXS分片和MTP；短生成预检不代表128K质量或5080性能验收。\n"
         "   0.11.0新增独立DeepSeek IQ2_XXS入口Install-Strata-DeepSeek.cmd（约256.8GB权重／Engram／草稿数据）。\n"
         "   Qwen与DeepSeek各自准备，停服后在管理器选择Strata Qwen或Strata DeepSeek配置。\n"
+        "   0.11.1支持两个Install-Strata入口传入--storage-root SSD绝对目录，下载、权重、MTP、pack和运行库存放于该盘。\n"
+        "   路径在每款准备成功后保存；旧下载不自动搬迁，--source-models仍是校验复制来源。选盘与复用步骤见运维文档。\n"
         "   两款准备完成后，保持AiServer停服，运行Test-StrataModels.cmd依次验收并采集同一代码样例耗时；不同时加载。\n"
         "   已有9B／27B保持现有配置与模型顺序；新增三模型的一键下载、注册和回退见运维0.9.12章节。\n"
         "   Use-9B27B.cmd是主动收敛为双模型的旧维护入口，普通升级不要求执行。\n"

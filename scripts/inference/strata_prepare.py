@@ -244,6 +244,13 @@ def prepare(args):
         (ROOT / ("config/inference.strata" + suffix + ".example.json")).read_text(encoding="utf-8"))
     if is_deepseek(cfg) != deepseek:
         raise ValueError("The selected installation entry does not match this model family")
+    requested_storage = getattr(args, "storage_root", None)
+    storage_value = str(requested_storage) if requested_storage is not None else cfg.get("StorageRoot")
+    if storage_value is not None:
+        if not isinstance(storage_value, str) or not Path(storage_value).is_absolute():
+            raise ValueError("StorageRoot must be an absolute folder on the selected SSD")
+        cfg["StorageRoot"] = str(Path(storage_value).resolve())
+    storage = Path(cfg["StorageRoot"]) if storage_value is not None else ROOT / ".local/strata"
     cfg["ExecutablePath"] = str(Path(sys.executable).resolve())
     if args.context is not None:
         cfg["NumCtx"] = args.context
@@ -282,7 +289,8 @@ def prepare(args):
     work = ROOT / ".local/strata/install" / uuid4().hex
     work.mkdir(parents=True)
     data_lock = offline(ROOT, validate_settings) if settings.data_directory != resolve(ROOT, base.get("data_directory", ".local/server")) else nullcontext()
-    with InstanceLock(ROOT / ".local/strata/preparation"), offline(ROOT, base), data_lock:
+    storage_lock = InstanceLock(storage / "preparation") if storage.resolve() != (ROOT / ".local/strata").resolve() else nullcontext()
+    with InstanceLock(ROOT / ".local/strata/preparation"), offline(ROOT, base), data_lock, storage_lock:
         # The current data lock must be idle before preparation; switching does not consume old queued tasks.
         db = settings.data_directory / "jobs.db"
         if db.exists():
@@ -291,8 +299,9 @@ def prepare(args):
             with closing(sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)) as conn:
                 if conn.execute("SELECT count(*) FROM jobs WHERE status IN ('queued','running','cancelling')").fetchone()[0]:
                     raise ValueError("Finish existing jobs before changing the inference backend")
-        cache = ROOT / ".local/strata/downloads"
-        home = ROOT / ".local/apps/strata/v0.2.9"
+        print("Strata storage: " + str(storage), flush=True)
+        cache = storage / "downloads"
+        home = storage / "runtime/v0.2.9" if storage_value is not None else ROOT / ".local/apps/strata/v0.2.9"
         engine_folder = home / ("engine-dsv41" if deepseek else "engine")
         source_folder = home / ("deepseek-source" if deepseek else "source")
         for name, asset in source["artifacts"].items():
@@ -320,8 +329,11 @@ def prepare(args):
         dependency = home / "dependencies" / requirement_hash[:16]
         if args.install_dependencies and not dependency.exists():
             stage = home / ("dependencies.prepare-" + uuid4().hex)
+            pip_env = os.environ.copy()
+            if storage_value is not None:
+                pip_env["PIP_CACHE_DIR"] = str(storage / "pip-cache")
             run([sys.executable, "-m", "pip", "install", "--only-binary=:all:", "--no-deps", "--require-hashes", "--target", str(stage),
-                "-r", str(requirement_path)], cwd=ROOT, env=os.environ.copy(), log=work/"dependencies.log")
+                "-r", str(requirement_path)], cwd=ROOT, env=pip_env, log=work/"dependencies.log")
             dependency.parent.mkdir(parents=True, exist_ok=True)
             (stage / ".aiserver-requirements.sha256").write_text(requirement_hash)
             stage.rename(dependency)
@@ -337,7 +349,7 @@ def prepare(args):
         run([sys.executable, "-s", str(runtime / "serve/server.py"), "--help"], cwd=runtime, env=env, log=work/"runtime-check.log")
         if deepseek:
             run([str(engines[0]), "--version"], cwd=runtime, env=env, log=work/"runtime-check.log")
-        model_dir = ROOT / (".local/strata/models/deepseek41/IQ2_XXS" if deepseek else ".local/strata/models/IQ3_XXS")
+        model_dir = storage / ("models/deepseek41/IQ2_XXS" if deepseek else "models/IQ3_XXS")
         model_dir.mkdir(parents=True, exist_ok=True)
         missing_bytes = sum(max(0, row["size"] - ((model_dir / (row["filename"] + ".download")).stat().st_size
             if (model_dir / (row["filename"] + ".download")).exists() else 0))
@@ -361,7 +373,7 @@ def prepare(args):
         native = model_dir / source["model_files"][0]["filename"]
         # Publish references to a new prepared set only after preflight. A failed repeat
         # must not rewrite files (or their mtimes) used by an older identity lock.
-        prepared_set = ROOT / ".local/strata/prepared" / work.name
+        prepared_set = storage / "prepared" / work.name
         prepared_set.mkdir(parents=True)
         pack = prepared_set / "pack"
         if deepseek:
@@ -399,7 +411,7 @@ def prepare(args):
         else:
             # The native pack indexes experts in place; it does not write another 43 GB expert pool.
             run([sys.executable, "-s", str(runtime/"tools/iq_pack.py"), "--gguf", str(native), "--out", str(pack)], cwd=runtime, env=env, log=work/"prepare.log")
-            mtp_source = ROOT / ".local/strata/mtp-source"
+            mtp_source = storage / "mtp-source"
             mtp = prepared_set / "mtp"
             mtp_gguf = prepared_set / "mtp-q2_0.gguf"
             for tool, values in (("mtp_fetch.py", ["fetch", "--out", str(mtp_source)]),
@@ -440,6 +452,7 @@ def prepare(args):
                    cfg_path: json_bytes(cfg), output_server: json_bytes(validate_settings)}
         commit_configs(changes, expected)
         report = {"prepared": True, "model": cfg["Model"], "context": cfg["NumCtx"], "server_config": str(output_server),
+                  "storage_root": str(storage),
                   "verification": "load-and-short-generation-only", "long_context_and_5080_acceptance": False}
         (work/"summary.json").write_bytes(json_bytes(report))
         print("Prepared. Select this service config in ServerManager: " + str(output_server), flush=True)
