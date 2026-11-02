@@ -5,7 +5,7 @@ Profile snapshots freeze model identity, mapping, capacity and server parameters
 Providers await on_delta(text, channel); both channels commit before SSE sends them.
 Cancellation closes transport. Late returns are discarded; the slot stays held.
 automatic_cleanup_verified is used only for development test providers.
-Real providers restart their managed engine to establish a fresh execution slot.
+Real providers verify upstream idleness or restart their managed engine before reuse.
 Python task termination alone never certifies GPU stop.
 """
 from dataclasses import dataclass

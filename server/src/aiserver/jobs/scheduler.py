@@ -162,7 +162,7 @@ class Scheduler:
     async def recover_engine(self, job):
         self.state = "recovering"
         try:
-            async with asyncio.timeout(self.settings.cleanup_timeout_seconds):
+            async with asyncio.timeout(getattr(self.provider, "recovery_timeout_seconds", self.settings.cleanup_timeout_seconds)):
                 restored = await self.provider.recover()
             if restored:
                 await self.db(self.store.engine_recovered, job)

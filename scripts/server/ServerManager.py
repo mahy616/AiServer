@@ -78,6 +78,12 @@ class ServerManager:
         self.load_button=ttk.Button(paths,text="加载配置 / 记住路径",command=self.load_config)
         self.load_button.grid(row=3,column=1,sticky="w",pady=(8,0))
         self.path_widgets.append(self.load_button)
+        backend_choices = ttk.Frame(paths)
+        backend_choices.grid(row=4, column=1, sticky="w", pady=(6,0))
+        for backend in ("Ollama", "Strata"):
+            choice = ttk.Button(backend_choices, text=backend + "配置", command=lambda name=backend: self.choose_backend(name))
+            choice.pack(side="left", padx=(0,8))
+            self.path_widgets.append(choice)
         self.tabs=ttk.Notebook(shell)
         self.tabs.pack(fill="both",expand=True,pady=(14,10))
         self.build_service()
@@ -91,6 +97,23 @@ class ServerManager:
         self.window.after(2000,self.poll_monitor)
         if auto_load and Path(self.config.get()).is_file():
             self.window.after(180,self.load_config)
+
+    def choose_backend(self, backend):
+        filename = "server.strata.local.json" if backend == "Strata" else "server.local.json"
+        path = ROOT / "config" / filename
+        if not path.is_file():
+            self.feedback.set("请先停服运行Install-Strata.cmd准备Strata。" if backend == "Strata" else "请先选择原Ollama私有服务配置。")
+            return
+        try:
+            value = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            self.feedback.set("配置无法读取，请检查JSON文件。")
+            return
+        if value.get("provider") != backend:
+            self.feedback.set("所选默认文件不是" + backend + "配置，请手工选择正确的服务JSON。")
+            return
+        self.config.set(str(path))
+        self.load_config()
 
     def button(self,parent,text,command):
         button=ttk.Button(parent,text=text,command=command)
@@ -398,7 +421,7 @@ class ServerManager:
         self.loaded=result; self.loaded_path=str(Path(self.config.get()).resolve())
         for key,value in result["fields"].items(): self.fields[key].set(value)
         summary=result["summary"]
-        self.summary.set(f'保持原配置：端口 {summary["port"]}；数据目录 {summary["dataDirectory"]}\n模型配置 {summary["inferenceConfig"]}；允许域名 {", ".join(summary["allowedHosts"])}')
+        self.summary.set(f'后端 {summary.get("provider", "Ollama")}；端口 {summary["port"]}；数据目录 {summary["dataDirectory"]}\n模型配置 {summary["inferenceConfig"]}；允许域名 {", ".join(summary["allowedHosts"])}')
         atomic_write(self.launcher_file,(json.dumps({"python":self.python.get(),"config":self.config.get()},ensure_ascii=False,indent=2)+"\n").encode("utf-8"))
         self.feedback.set("配置已加载，路径已记住；原文件尚未修改。")
 

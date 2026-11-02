@@ -27,7 +27,7 @@ class PreparedPrompt:
         return json.loads(self.messages_json)
 
 
-def prepare_messages(request: dict, images, image_policy: dict) -> PreparedPrompt:
+def prepare_messages(request: dict, images, image_policy: dict, *, provider="Ollama") -> PreparedPrompt:
     """Freeze client roles and ordered parts without injecting a system prompt.
 
     Ollama's native API uses a string plus an images array. [img] preserves each
@@ -53,12 +53,20 @@ def prepare_messages(request: dict, images, image_policy: dict) -> PreparedPromp
                 hashes.append(image.sha256)
         message = {"role": original["role"], "content": "".join(pieces)}
         if "reasoning_content" in original:
-            message["thinking"] = original["reasoning_content"]
+            message["reasoning_content" if provider == "Strata" else "thinking"] = original["reasoning_content"]
         if original.get("tool_calls"):
-            message["tool_calls"] = [{"type": "function", "function": call["function"]}
-                                     for call in original["tool_calls"]]
+            if provider == "Strata":
+                message["tool_calls"] = [{"id": call["id"], "type": "function", "function": {
+                    "name": call["function"]["name"], "arguments": json.dumps(call["function"]["arguments"],
+                        ensure_ascii=False, separators=(",", ":"), allow_nan=False)}} for call in original["tool_calls"]]
+            else:
+                message["tool_calls"] = [{"type": "function", "function": call["function"]}
+                                         for call in original["tool_calls"]]
         if original["role"] == "tool":
-            message["tool_name"] = original["tool_name"]
+            if provider == "Strata":
+                message["tool_call_id"] = original["tool_call_id"]
+            else:
+                message["tool_name"] = original["tool_name"]
         if encoded:
             message["images"] = encoded
         messages.append(message)
@@ -66,7 +74,7 @@ def prepare_messages(request: dict, images, image_policy: dict) -> PreparedPromp
     tools = [{"type": "function", "function": {k: v for k, v in tool["function"].items() if k != "strict"}}
              for tool in request.get("tools", [])]
     prepared = PreparedPrompt(serialized, "", request.get("protocol", "client-messages-v1"), tuple(hashes),
-                              sum(len((m["content"] + m.get("thinking", "")).encode("utf-8")) for m in messages),
+                              sum(len((m["content"] + m.get("thinking", m.get("reasoning_content", ""))).encode("utf-8")) for m in messages),
                               json.dumps(tools, ensure_ascii=False, separators=(",", ":")),
                               json.dumps(request.get("options", {})),
                               request.get("tool_choice", "auto"), request.get("parallel_tool_calls", True),

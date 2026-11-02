@@ -1,14 +1,16 @@
 # AiServer API与OpenCode接入
 
-原生HTTP API路径为`/api/v1`，OpenAI兼容入口为`/v1`。对应服务端版本：0.9.11；更新日期：2026-10-28。OpenCode接入见第10节；第2至9节记录服务端保留的原生接口与认证、任务语义。
+原生HTTP API路径为`/api/v1`，OpenAI兼容入口为`/v1`。对应服务端版本：0.10.0；更新日期：2026-11-02。OpenCode接入见第10节；第2至9节记录服务端保留的原生接口与认证、任务语义。
 
 示例地址和模型名称用于说明；实际服务地址、个人API key及模型由部署方提供。本文不承诺部署当前在线，连接时按实际响应验证。
+
+0.10.0允许服务启动时选择Ollama或Strata，公共接口和认证不变，客户端以models返回的能力为准。Strata初版模型为`qwen3.8-flash-next:iq3_xxs`，仅文字与工具，普通`think=false`／思考`think=true`映射上游none／high；默认总窗口131072、最大输出16384、预留512，思考与正文共用输出预算。容量标为`conservative-estimate-v1`，超限拒绝且不静默截断。手工样例见[Strata OpenCode配置](../../examples/opencode.strata.example.json)和[请求](../../examples/openai-strata-request.json)；部署步骤见运维文档。
 
 ## 1. OpenCode与服务端职责
 
 客户端统一使用OpenCode。OpenCode在本机组织需求、项目文件、历史和工具结果，通过AiServer的`/v1/chat/completions`访问模型；模型返回工具调用后，由本机OpenCode执行文件读取、编辑或命令，再回传结果。5080上的AiServer负责鉴权、模型能力、排队、推理、停止、结果和监控，不运行OpenCode Agent或读取客户端磁盘。
 
-本机启动、密钥设置和验证步骤维护在[运维文档](../../../docs/正式工程运维.md#本机opencode执行端)。本机入口使用独立API key，自动从模型清单刷新9B／27B模型ID及容量；本文件保留通用provider配置和完整线协议样例。原生接口继续供连接检查、管理工具与服务兼容使用，不再交付独立桌面客户端或C#通信实现。
+本机启动、密钥设置和验证步骤维护在[运维文档](../../../docs/正式工程运维.md#本机opencode执行端)。本机入口使用独立API key，自动从模型清单刷新已注册模型ID及容量；本文件保留通用provider配置和完整线协议样例。原生接口继续供连接检查、管理工具与服务兼容使用，不再交付独立桌面客户端或C#通信实现。
 
 ## 2. 连接约定与端点总表
 

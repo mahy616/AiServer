@@ -76,7 +76,7 @@ def inspect_config(root, path):
         "public_base_url": value.get("public_base_url", "") or "",
     }
     return {"fields":fields, "sha256":hashlib.sha256(original).hexdigest(),
-            "summary":{"port":value.get("port", 18080), "dataDirectory":str(data_directory(root,value)),
+            "summary":{"port":value.get("port", 18080), "provider":value.get("provider", "Ollama"), "dataDirectory":str(data_directory(root,value)),
                        "inferenceConfig":value.get("inference_config", "config/inference.qwen35.example.json"),
                        "allowedHosts":value.get("allowed_hosts", [])}}
 

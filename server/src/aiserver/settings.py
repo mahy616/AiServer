@@ -63,8 +63,10 @@ class Settings(BaseModel):
 
     @model_validator(mode="after")
     def check(self):
-        if self.provider not in ("Fake", "Ollama") or self.environment not in ("Development", "Production"):
+        if self.provider not in ("Fake", "Ollama", "Strata") or self.environment not in ("Development", "Production"):
             raise ValueError("Unknown environment/provider")
+        if self.provider == "Strata" and (self.additional_inference_configs or not self.manage_engine):
+            raise ValueError("Strata v1 requires one managed model")
         if self.environment == "Production" and self.provider == "Fake":
             raise ValueError("Fake is restricted to Development")
         if self.manage_natapp is None:

@@ -11,6 +11,7 @@ Python 3.12／FastAPI／SQLite通用图文推理服务。版本以[pyproject.tom
 - `context/prompt_builder.py:prepare_messages`、`input_budget.py`：保留客户端角色和图文顺序，冻结请求并估算容量，不注入业务提示词。
 - `context/coder_budget.py`：Coder实际模板只渲染＋锁定分词器预算，包含工具；预算与引擎实际usage分开。模型准备／切换入口和调节步骤见运维的Coder章节。
 - `inference/runtime.py`、`ollama.py`：冻结推理配置，校验身份，读取有界NDJSON，区分实际计数与估算。
+- `inference/strata.py`：单个固定Strata模型的本机Chat Completions／SSE适配、工具历史、思考、身份与窗口检查，以及托管进程的停止恢复；与Ollama在启动时二选一。
 - `inference/registry.py`：多个独立锁定模型共享一个Ollama进程与生成位，按model路由到各自配置与容量检查。
 - `operations/service.py`、`engine.py`、`tunnel.py`、`processes.py`：统一托管API／模型／NATAPP，锁与进程身份、Windows Job树收尾、连接器退避重启。
 - `storage/db.py:token_create/tokens/token_revoke/authenticate_details`：账号与API key管理；schema v6在备份旧库后增加正文／思考分块通道，保留账号、key与任务。历史v5密码移除迁移继续保留。`operations/diagnostics.py`负责启动前检查与安全错误报告。

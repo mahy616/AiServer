@@ -95,6 +95,13 @@ def inventory(root=ROOT, *, include_reference=True):
         required.update(root / f"config/{folder}{key}.{suffix}.json"
                         for key in ("gptoss", "gemma12", "gemma26")
                         for folder, suffix in (("inference.", "example"), ("models/", "source")))
+    if tuple(int(x) for x in version.split(".")) >= (0, 10, 0):
+        required.update(root / path for path in (
+            "contracts/examples/opencode.strata.example.json", "contracts/examples/openai-strata-request.json",
+            "Install-Strata.cmd", "scripts/inference/Install-Strata.ps1", "scripts/inference/Install-Strata.py",
+            "scripts/inference/strata_prepare.py", "scripts/inference/strata.requirements.txt",
+            "scripts/validation/Test-Strata.py", "config/server.strata.example.json",
+            "config/inference.strata.example.json", "config/models/strata.source.json"))
     optional = [root / path for path in (
         "config/server.example.json", "config/server.ollama.example.json", "config/natapp.example.ini",
         "config/inference.5080.example.json", "config/inference.5080.8b.example.json",

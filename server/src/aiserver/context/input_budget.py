@@ -21,7 +21,7 @@ class BudgetDecision:
 def check_budget(prepared: PreparedPrompt, profile: dict) -> BudgetDecision:
     validate_window(profile)
     limit = input_budget(profile, output_budget(profile, json.loads(prepared.options_json)))
-    text = "".join(item["content"] + item.get("thinking", "") for item in prepared.messages())
+    text = "".join(item["content"] + item.get("thinking", item.get("reasoning_content", "")) for item in prepared.messages())
     if prepared.prompt_version == "openai-chat-v1":
         text += prepared.tools_json
         text += "".join(json.dumps(m["tool_calls"], ensure_ascii=False) for m in prepared.messages() if m.get("tool_calls"))

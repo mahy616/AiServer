@@ -143,9 +143,8 @@ class ManagedEngine:
                 raise StartupFailure(engine_port_problem(uri.port,self.record))
         if not self.executable.is_file():
             raise RuntimeError("Engine executable missing")
-        from aiserver.inference.configuration import engine_environment
-        environment = engine_environment(self.cfg, ROOT)
-        self.child = subprocess.Popen([str(self.executable), "serve"], env=environment, cwd=ROOT,
+        command, environment, cwd = self.launch_spec()
+        self.child = subprocess.Popen(command, env=environment, cwd=cwd,
                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                       creationflags=(subprocess.CREATE_NO_WINDOW | 0x4) if os.name == "nt" else 0,
                                       start_new_session=os.name != "nt")
@@ -177,6 +176,10 @@ class ManagedEngine:
                 handler.close()
         self.reader = threading.Thread(target=drain, daemon=True)
         self.reader.start()
+
+    def launch_spec(self):
+        from aiserver.inference.configuration import engine_environment
+        return [str(self.executable), "serve"], engine_environment(self.cfg, ROOT), ROOT
 
     async def start(self):
         await asyncio.to_thread(self._launch)

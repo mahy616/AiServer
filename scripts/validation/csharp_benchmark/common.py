@@ -21,13 +21,15 @@ MODELS = {
     "gptoss": "gpt-oss:20b",
     "gemma12": "gemma4:12b-it-q4_K_M",
     "gemma26": "aiserver-gemma4:26b-a4b-it-q3_k_m",
+    "strata": "qwen3.8-flash-next:iq3_xxs",
 }
 TIMEOUTS = {"easy": 180, "medium": 600, "hard": 1800}
 THINKING_TIMEOUTS = {"easy": 600, "medium": 1800, "hard": 3600}
 ROLE_LEVELS = {"7b": ("easy",), "14b": ("easy",), "9b": ("easy", "medium"), "qwen38": ("medium", "hard")}
 ROLE_LEVELS.update(gptoss=("easy", "medium"), gemma12=("easy", "medium"), gemma26=("easy", "medium"))
-THINKING_MODELS = frozenset(("9b", "qwen38", "gemma12", "gemma26"))
-ACTIVE_MODELS = ("9b", "qwen38", "gptoss", "gemma12", "gemma26")
+ROLE_LEVELS["strata"] = ("medium", "hard")
+THINKING_MODELS = frozenset(("9b", "qwen38", "gemma12", "gemma26", "strata"))
+ACTIVE_MODELS = ("9b", "qwen38", "gptoss", "gemma12", "gemma26", "strata")
 DEFAULT_MODELS = ("9b", "qwen38")  # New models must be installed before selecting them.
 
 

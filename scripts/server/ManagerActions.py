@@ -205,6 +205,23 @@ def startup_check(config):
         except Exception as error:
             problem=diagnostic(error,"configuration")
             add(False,problem["code"],problem["message"])
+    elif settings.provider == "Strata":
+        try:
+            from aiserver.inference.strata import load_strata_profile, path_of
+            from urllib.parse import urlsplit
+            cfg, identity, profile = load_strata_profile(settings)
+            add(True, "INFERENCE_PROFILE_VALID", "Strata模型锁、运行配置和文件检查通过；允许CPU／内存协同，未启动真实模型。")
+            for key in ("ExecutablePath", "EnginePath", "RunConfigPath"):
+                add(path_of(cfg[key]).is_file(), "INFERENCE_PATH", key + "：" + str(path_of(cfg[key])))
+            uri = urlsplit(cfg["BaseUrl"])
+            with socket.socket() as probe:
+                probe.settimeout(1)
+                occupied = probe.connect_ex((uri.hostname, uri.port)) == 0
+            add(not occupied, "ENGINE_PORT_IN_USE" if occupied else "ENGINE_PORT_FREE",
+                "Strata端口已占用，请从原入口停止实例。" if occupied else "Strata端口空闲；冷加载允许900秒。")
+        except Exception as error:
+            problem = diagnostic(error, "configuration")
+            add(False, problem["code"], problem["message"])
     return {"ok":all(item["ok"] for item in checks),"checks":checks}
 
 

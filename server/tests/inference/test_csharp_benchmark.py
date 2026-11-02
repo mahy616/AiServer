@@ -291,12 +291,13 @@ def test_real_opencode_read_write_single_session_against_synthetic_model(tmp_pat
     assert all((r["reasoning_chars"] > 0) is bool(thinking) for r in result["requests"])
 
 
-def test_five_model_benchmark_and_gptoss_levels_are_independent(tmp_path):
+def test_available_models_and_gptoss_levels_are_independent(tmp_path):
     state = runner.prepare(tmp_path / 'run', list(runner.ACTIVE_MODELS), ['easy'], ['write'], thinking='both')
     runner.validate_run(state)
-    assert len(state['conditions']) == 11
+    assert len(state['conditions']) == 13
     assert [c['thinking'] for c in state['conditions'].values() if c['base_alias'] == 'gptoss'] == ['low', 'medium', 'high']
-    assert len({t['id'] for t in state['tasks']}) == 11
+    assert len({t['id'] for t in state['tasks']}) == 13
+    assert [c['thinking'] for c in state['conditions'].values() if c['base_alias'] == 'strata'] == [False, True]
     with pytest.raises(ValueError, match='不能关闭'):
         runner.prepare(tmp_path / 'invalid', ['gptoss'], ['easy'], ['write'], thinking='off')
     state = runner.prepare(tmp_path / 'fallback', ['gptoss'], ['easy'], ['write'], thinking='fallback')
