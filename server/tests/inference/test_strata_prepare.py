@@ -3,15 +3,91 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import zipfile
 
 import pytest
 import requests
 
 from aiserver.settings import ROOT
+from aiserver.operations.lock import InstanceLock
 
 sys.path.insert(0, str(ROOT / "scripts/inference"))
 import strata_prepare as install
+
+
+def preparation_fixture(tmp_path):
+    for name in ("config/models/strata.source.json", "config/inference.strata.example.json",
+                 "server/src/aiserver/operations/lock.py"):
+        output = tmp_path / name
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes((ROOT / name).read_bytes())
+    base = tmp_path / "config/server.local.json"
+    base.write_text(json.dumps({"environment": "Development", "provider": "Ollama", "manage_natapp": False,
+                               "data_directory": str(tmp_path / "data")}), encoding="utf-8")
+    return SimpleNamespace(server_config=str(base), context=None, install_dependencies=False, source_models=None)
+
+
+def test_real_prepare_entry_reaches_download_with_both_locks_and_releases_on_failure(tmp_path, monkeypatch):
+    args = preparation_fixture(tmp_path)
+    monkeypatch.setattr(install, "ROOT", tmp_path)
+    class DownloadFailure(Exception):
+        pass
+    def download(*args):
+        for directory in (tmp_path / ".local/strata/preparation", tmp_path / "data"):
+            with pytest.raises(RuntimeError, match="active instance"):
+                InstanceLock(directory).acquire()
+        raise DownloadFailure("synthetic download failure")
+    monkeypatch.setattr(install, "download", download)
+    base = Path(args.server_config).read_bytes()
+    with pytest.raises(DownloadFailure):
+        install.prepare(args)
+    assert Path(args.server_config).read_bytes() == base
+    assert not (tmp_path / "config/server.strata.local.json").exists()
+    for directory in (tmp_path / ".local/strata/preparation", tmp_path / "data"):
+        lock = InstanceLock(directory).acquire()
+        lock.release()
+
+
+def test_real_prepare_entry_refuses_running_service_and_releases_preparation_lock(tmp_path, monkeypatch):
+    args = preparation_fixture(tmp_path)
+    monkeypatch.setattr(install, "ROOT", tmp_path)
+    calls = []
+    monkeypatch.setattr(install, "download", lambda *args: calls.append(args))
+    active = InstanceLock(tmp_path / "data").acquire()
+    try:
+        with pytest.raises(RuntimeError, match="active instance"):
+            install.prepare(args)
+        lock = InstanceLock(tmp_path / ".local/strata/preparation").acquire()
+        lock.release()
+        assert not calls
+    finally:
+        active.release()
+
+
+@pytest.mark.parametrize("crash", [False, True])
+def test_real_validation_entry_holds_and_releases_data_lock(tmp_path, monkeypatch, crash):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("strata_validation_entry", ROOT / "scripts/validation/Test-Strata.py")
+    entry = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(entry)
+    monkeypatch.setattr(entry, "ROOT", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["Test-Strata.py"])
+    monkeypatch.setattr(entry.Settings, "load", lambda _: SimpleNamespace(provider="Strata", data_directory=tmp_path / "data"))
+    async def verify(settings, long_context, destination):
+        with pytest.raises(RuntimeError, match="active instance"):
+            InstanceLock(settings.data_directory).acquire()
+        if crash:
+            raise ValueError("synthetic validation failure")
+        return True
+    monkeypatch.setattr(entry, "verify", verify)
+    if crash:
+        with pytest.raises(ValueError, match="synthetic validation failure"):
+            entry.main()
+    else:
+        assert entry.main() == 0
+    lock = InstanceLock(tmp_path / "data").acquire()
+    lock.release()
 
 
 class Response:

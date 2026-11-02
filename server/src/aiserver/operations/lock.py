@@ -6,6 +6,12 @@ class InstanceLock:
         self.path = Path(directory) / "instance.lock"
         self.file = None
 
+    def __enter__(self):
+        return self.acquire()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.release()
+
     def acquire(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.file = self.path.open("a+b")
