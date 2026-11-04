@@ -13,7 +13,7 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 | 仓库 | 阶段标签 | 本阶段结果 |
 |---|---|---|
 | [IMVision.ScriptKnowledge](https://github.com/mahy616/IMVision.ScriptKnowledge)（私有） | `knowledge-v4.0.5` | v4协议／知识包1.0.5，保留141种工具，按任务装配与完整回查；用户反馈最新测试效果可用，作为本阶段基线 |
-| [Tool.ScriptCsharp](https://github.com/mahy616/Tool.ScriptCsharp)（私有） | `v1.1.0` | DeepSeek／AiServer双后端、v3/v4切换、独立对话与正文流式显示；检查新增代码并移除两个无运行调用的包装方法，私有默认密钥与源码分离 |
+| [Tool.ScriptCsharp](https://github.com/mahy616/Tool.ScriptCsharp)（私有） | `v1.1.1` | DeepSeek／AiServer双后端、v3/v4切换、独立对话与正文流式显示；移除两个无运行调用的包装方法，分离私有默认密钥，并修复Git检出换行导致的知识指纹不匹配 |
 | [AiServer](https://github.com/mahy616/AiServer) | `v0.12.0` | Strata双模型按任务切换，保留单生成位、账号／API key和现有Ollama兼容 |
 
 本机回归、知识包重建与模拟工具链检查用于确认工程基线；真实模型效果仍按具体任务评估。主程序 `D:\Program Files\IMVision1029` 及其 `ScriptAI` 是安装目录，本次只冻结和推送源码，未覆盖安装文件。各仓库保存各自验证记录，服务端详情见[项目进度](docs/项目进度.md)，操作步骤见[正式工程运维](docs/正式工程运维.md)。
