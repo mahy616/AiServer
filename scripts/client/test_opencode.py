@@ -120,6 +120,23 @@ def test_all_models_and_each_capacity_survive_refresh(monkeypatch, tmp_path):
     assert json.loads(support.CONFIG.read_text(encoding="utf-8"))["model"] == "aiserver/" + models[2]["id"]
 
 
+def test_strata_models_keep_both_choices_capacities_and_thinking_after_refresh(monkeypatch, tmp_path):
+    locations(monkeypatch, tmp_path)
+    result = remote()
+    models = result["/api/v1/models"]["models"] = []
+    for suffix in ("", ".deepseek"):
+        cfg = json.loads((support.ROOT / f"config/inference.strata{suffix}.example.json").read_bytes())
+        models.append({"id": cfg["Model"], "toolCall": True, "thinking": True, "inputTypes": ["text"],
+            "limits": {"contextTokens": cfg["NumCtx"], "maxInputTokens": cfg["NumCtx"]-513,
+                       "defaultMaxInputTokens": cfg["NumCtx"]-cfg["NumPredict"]-512, "maxOutputTokens": cfg["NumPredict"]}})
+    support.configure(support.key_record(support.DEFAULT_SERVER, KEY), result)
+    client = json.loads(support.CONFIG.read_bytes())
+    assert client["provider"]["aiserver"]["options"]["timeout"] == 18000000
+    assert list(client["provider"]["aiserver"]["models"]) == [m["id"] for m in models]
+    assert all(m["variants"] == {"normal": {"think": False}, "thinking": {"think": True}}
+               for m in client["provider"]["aiserver"]["models"].values())
+
+
 def test_reasoning_is_opt_in_with_variants_only_for_capable_models(monkeypatch, tmp_path):
     locations(monkeypatch, tmp_path)
     result = remote()
@@ -156,6 +173,7 @@ def test_gptoss_levels_and_existing_selection_survive_refresh(monkeypatch, tmp_p
 @pytest.mark.parametrize("template,expected", [
     ("coder", 114176), ("coder14b", 65024), ("qwen35", 114176),
     ("qwen38", 65024), ("5080", 28160), ("5080.8b", 28160),
+    ("strata", 114176), ("strata.deepseek", 114176),
 ])
 def test_each_model_reserves_default_output_even_with_older_server(template, expected):
     cfg = json.loads((support.ROOT / f"config/inference.{template}.example.json").read_bytes())

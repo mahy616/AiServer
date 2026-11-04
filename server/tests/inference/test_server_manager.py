@@ -146,6 +146,92 @@ def test_manager_host_real_loopback_stop_via_private_pipe(tmp_path):
         for pipe in (process.stdin,process.stdout,process.stderr): pipe.close()
 
 
+@pytest.mark.parametrize("stop_command", [True, False], ids=["stop-command", "owner-eof"])
+def test_manager_host_starts_owned_strata_engine_before_stop(tmp_path, stop_command):
+    """Real managed Python child and HTTP, with synthetic engine responses only."""
+    path, value = configuration(tmp_path)
+    with socket.socket() as api_probe, socket.socket() as engine_probe:
+        api_probe.bind(("127.0.0.1", 0))
+        engine_probe.bind(("127.0.0.1", 0))
+        ports = [api_probe.getsockname()[1], engine_probe.getsockname()[1]]
+    value["port"] = ports[0]
+    path.write_text(json.dumps(value), encoding="utf-8")
+    runtime = tmp_path / "runtime"
+    (runtime / "serve").mkdir(parents=True)
+    (runtime / "serve/server.py").write_text('''
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import sys
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'{"status":"ok"}')
+    def log_message(self, *args): pass
+HTTPServer(("127.0.0.1", int(sys.argv[-1])), Handler).serve_forever()
+''', encoding="utf-8")
+    bootstrap = tmp_path / "host.py"
+    bootstrap.write_text('''
+import asyncio, json, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import ManagerActions as actions
+import aiserver.app as application
+from aiserver.inference.fake import FakeProvider
+from aiserver.inference.strata import ManagedStrataEngine
+value = json.loads(sys.stdin.readline())
+engine = ManagedStrataEngine(value["engineConfig"], Path(value["config"]).parent / "logs")
+engine.lock_directory = Path(value["config"]).parent / "engine-lock"
+engine.record = engine.lock_directory / "process.json"
+class Provider(FakeProvider):
+    async def start(self): await engine.start()
+    async def aclose(self):
+        await engine.close()
+        await super().aclose()
+factory = application.create_app
+application.create_app = lambda settings: factory(settings, provider=Provider(0))
+asyncio.run(actions.host(value))
+''', encoding="utf-8")
+    process = subprocess.Popen([sys.executable, "-u", str(bootstrap), str(ROOT / "scripts/server")],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+        env=support.child_environment(ROOT), creationflags=(subprocess.CREATE_NO_WINDOW | 0x4) if os.name=="nt" else 0)
+    job = None
+    try:
+        if os.name == "nt":
+            from aiserver.operations.engine import WindowsJob, process_identity
+            from aiserver.operations.processes import resume_suspended
+            job = WindowsJob(process)
+            resume_suspended(process)
+        process.stdin.write(json.dumps({"config": str(path), "engineConfig": {
+            "ExecutablePath": sys.executable, "EnginePath": sys.executable,
+            "RuntimePath": str(runtime), "DependencyPath": str(runtime), "RunConfigPath": str(path),
+            "BaseUrl": f"http://127.0.0.1:{ports[1]}", "StartupTimeoutSeconds": 5}}) + "\n")
+        process.stdin.flush()
+        ready = False
+        until = time.monotonic() + 8
+        with httpx.Client(trust_env=False) as client:
+            while time.monotonic() < until and process.poll() is None:
+                try:
+                    ready = client.get(f'http://127.0.0.1:{ports[0]}/api/v1/health', timeout=.3).status_code == 200
+                    if ready: break
+                except httpx.HTTPError: pass
+                time.sleep(.05)
+        record = tmp_path / "engine-lock/process.json"
+        engine_pid = json.loads(record.read_text(encoding="utf-8"))["pid"] if record.exists() else None
+        if stop_command:
+            process.stdin.write("stop\n"); process.stdin.flush()
+        # communicate closes the owning input pipe, exercising EOF shutdown too.
+        output, errors = process.communicate(timeout=12)
+        assert ready, output + errors
+        assert process.returncode == 0, output + errors
+        assert engine_pid is not None and not record.exists()
+        if os.name == "nt":
+            with pytest.raises(ProcessLookupError): process_identity(engine_pid)
+    finally:
+        if job: job.close()
+        if process.poll() is None: process.terminate(); process.wait(timeout=5)
+        for pipe in (process.stdin, process.stdout, process.stderr): pipe.close()
+
+
 def _check_tk_window(tmp_path):
     import tkinter as tk
     import ServerManager as desktop

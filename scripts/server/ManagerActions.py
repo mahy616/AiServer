@@ -207,12 +207,15 @@ def startup_check(config):
             add(False,problem["code"],problem["message"])
     elif settings.provider == "Strata":
         try:
-            from aiserver.inference.strata import load_strata_profile, path_of
+            from aiserver.inference.strata import path_of
+            from aiserver.inference.strata_registry import load_strata_models
             from urllib.parse import urlsplit
-            cfg, identity, profile = load_strata_profile(settings)
-            add(True, "INFERENCE_PROFILE_VALID", "Strata模型锁、运行配置和文件检查通过；允许CPU／内存协同，未启动真实模型。")
-            for key in ("ExecutablePath", "EnginePath", "RunConfigPath"):
-                add(path_of(cfg[key]).is_file(), "INFERENCE_PATH", key + "：" + str(path_of(cfg[key])))
+            entries = load_strata_models(settings)
+            cfg = entries[0][1]
+            add(True, "INFERENCE_PROFILE_VALID", f"{len(entries)}份Strata模型锁、运行配置和文件检查通过；按任务加载，单生成位；未启动真实模型。")
+            for _, model_cfg, _, _ in entries:
+                for key in ("ExecutablePath", "EnginePath", "RunConfigPath"):
+                    add(path_of(model_cfg[key]).is_file(), "INFERENCE_PATH", model_cfg["Model"] + " " + key + "：" + str(path_of(model_cfg[key])))
             uri = urlsplit(cfg["BaseUrl"])
             with socket.socket() as probe:
                 probe.settimeout(1)

@@ -189,7 +189,9 @@ class Scheduler:
                                admission_tokens=prepared.estimated_input_tokens,
                                logger_name="aiserver." + str(self.settings.data_directory)):
             generation = asyncio.create_task(self.provider.generate(prepared,stop,on_delta))
-        deadline = time.monotonic()+self.settings.execution_timeout_seconds
+        timeout = (self.provider.execution_timeout(prepared) if hasattr(self.provider, "execution_timeout")
+                   else self.settings.execution_timeout_seconds)
+        deadline = time.monotonic()+timeout
         cleanup_needed = False
         last_queue_check = time.monotonic()
         try:

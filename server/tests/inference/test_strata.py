@@ -162,8 +162,7 @@ def test_recovery_requires_idle_engine_or_managed_restart():
     asyncio.run(run())
 
 
-def test_strata_rejects_multiple_models_and_external_ownership():
-    with pytest.raises(ValueError):
-        Settings(provider="Strata", additional_inference_configs=["config/inference.qwen35.example.json"])
+def test_strata_accepts_model_registration_but_requires_managed_ownership():
+    assert Settings(provider="Strata", additional_inference_configs=["config/inference.strata.deepseek.example.json"]).additional_inference_configs
     with pytest.raises(ValueError):
         Settings(provider="Strata", manage_engine=False)

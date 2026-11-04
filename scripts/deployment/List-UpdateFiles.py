@@ -104,7 +104,10 @@ def inventory(root=ROOT, *, include_reference=True):
             "config/inference.strata.example.json", "config/models/strata.source.json"))
     if tuple(int(x) for x in version.split(".")) >= (0, 11, 0):
         required.update(root / path for path in (
-            "Install-Strata-DeepSeek.cmd", "Test-StrataModels.cmd", "scripts/validation/Test-StrataModels.ps1",
+            "Redirect-StrataModels.cmd", "scripts/inference/Redirect-StrataModels.ps1",
+            "Enable-StrataModels.cmd", "config/server.strata.multimodel.example.json",
+            "contracts/examples/opencode.strata.multimodel.example.json",
+            "Install-Strata-DeepSeek.cmd", "Set-Strata-DeepSeek-128K.cmd", "Test-StrataModels.cmd", "scripts/validation/Test-StrataModels.ps1",
             "config/server.strata.deepseek.example.json", "config/inference.strata.deepseek.example.json",
             "config/models/strata.deepseek.source.json", "contracts/examples/opencode.strata.deepseek.example.json",
             "contracts/examples/openai-strata-deepseek-request.json"))

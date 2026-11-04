@@ -144,8 +144,10 @@ class ManagedEngine:
         if not self.executable.is_file():
             raise RuntimeError("Engine executable missing")
         command, environment, cwd = self.launch_spec()
+        # The manager's stdin is its private stop pipe. A Python engine must not
+        # inherit that pipe while the manager's listener is reading it.
         self.child = subprocess.Popen(command, env=environment, cwd=cwd,
-                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                       creationflags=(subprocess.CREATE_NO_WINDOW | 0x4) if os.name == "nt" else 0,
                                       start_new_session=os.name != "nt")
         if os.name == "nt":

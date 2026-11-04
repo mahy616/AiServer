@@ -32,6 +32,42 @@ def preparation_fixture(tmp_path):
     return SimpleNamespace(server_config=str(base), context=None, install_dependencies=False, source_models=None)
 
 
+def test_enable_prepared_models_preserves_deployment_and_refuses_active_service(tmp_path, monkeypatch):
+    from aiserver.inference import strata_registry
+    args = preparation_fixture(tmp_path)
+    monkeypatch.setattr(install, "ROOT", tmp_path)
+    def entries(settings):
+        assert len(settings.additional_inference_configs) == 1
+        return [(settings, {"StartupTimeoutSeconds": 900, "GenerateTimeoutSeconds": 3600}, None, None),
+                (settings, {"StartupTimeoutSeconds": 3600, "GenerateTimeoutSeconds": 3600}, None, None)]
+    monkeypatch.setattr(strata_registry, "load_strata_models", entries)
+    for suffix in ("", ".deepseek"):
+        (tmp_path / f"config/inference.strata{suffix}.local.json").write_text("{}")
+    base = Path(args.server_config)
+    before = base.read_bytes()
+    active = InstanceLock(tmp_path / "data").acquire()
+    try:
+        with pytest.raises(RuntimeError, match="active instance"):
+            install.enable_models(base)
+        assert not (tmp_path / "config/server.strata.multimodel.local.json").exists()
+    finally:
+        active.release()
+    output = install.enable_models(base)
+    value = json.loads(output.read_bytes())
+    assert value["provider"] == "Strata" and value["data_directory"] == str(tmp_path / "data")
+    assert value["manage_natapp"] is False and value["queue_timeout_seconds"] == 7230
+    value["port"] = 19090
+    output.write_text(json.dumps(value))
+    assert install.enable_models(base) == output
+    assert json.loads(output.read_bytes())["port"] == 19090
+    assert base.read_bytes() == before
+    saved = output.read_bytes()
+    monkeypatch.setattr(strata_registry, "load_strata_models", lambda _: (_ for _ in ()).throw(ValueError("invalid model")))
+    with pytest.raises(ValueError, match="invalid model"):
+        install.enable_models(base)
+    assert output.read_bytes() == saved
+
+
 def test_real_prepare_entry_reaches_download_with_both_locks_and_releases_on_failure(tmp_path, monkeypatch):
     args = preparation_fixture(tmp_path)
     monkeypatch.setattr(install, "ROOT", tmp_path)
@@ -259,3 +295,44 @@ def test_source_lock_contains_full_shards_mtp_and_hashed_requirements():
     requirements = (ROOT / "scripts/inference/strata.requirements.txt").read_text()
     assert "--hash=sha256:" in requirements and "==" in requirements
     assert all(len(row["sha256"]) == 64 for row in source["model_files"])
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_install_diagnostics_keep_console_source_identity_and_chained_failure(tmp_path, monkeypatch, capsys, failed):
+    relative = "scripts/inference/strata_prepare.py"
+    file = tmp_path / relative
+    file.parent.mkdir(parents=True)
+    file.write_bytes(b"synthetic source identity")
+    monkeypatch.setattr(install, "ROOT", tmp_path)
+    monkeypatch.setenv("STRATA_API_KEY", "secret-canary-not-for-logs")
+    before_stdout, before_stderr = sys.stdout, sys.stderr
+    def prepare(args):
+        assert Path(args.diagnostic_directory).is_dir()
+        print("synthetic progress", flush=True)
+        print("synthetic stderr", file=sys.stderr, flush=True)
+        if failed:
+            try:
+                raise ValueError("underlying identity failure")
+            except ValueError as cause:
+                error = RuntimeError("MODEL_IDENTITY_CHECK_FAILED")
+                error.identity_details = {"mismatches": [{"field": "build_info", "actual": "unknown"}]}
+                raise error from cause
+    monkeypatch.setattr(install, "prepare", prepare)
+    args = SimpleNamespace(family="deepseek", deepseek_layout="six-shard", offline=True)
+    assert install.run_with_diagnostics(args) == int(failed)
+    assert sys.stdout is before_stdout and sys.stderr is before_stderr
+    directory = args.diagnostic_directory
+    log = (directory / "installer.log").read_text(encoding="utf-8")
+    assert "synthetic progress" in log and "synthetic stderr" in log
+    assert "Strata diagnostic format: 2" in capsys.readouterr().out
+    metadata = json.loads((directory / "diagnostics.json").read_bytes())
+    assert metadata["source_files"] == [{"path": relative, "sha256": install.digest(file)}]
+    assert metadata["offline"] and metadata["deepseek_layout"] == "six-shard"
+    if failed:
+        error = json.loads((directory / "failure.json").read_bytes())
+        assert "underlying identity failure" in error["traceback"]
+        assert "MODEL_IDENTITY_CHECK_FAILED" in log
+        assert error["identity_details"]["mismatches"][0]["field"] == "build_info"
+    else:
+        assert not (directory / "failure.json").exists()
+    assert all("secret-canary-not-for-logs" not in p.read_text(encoding="utf-8") for p in directory.iterdir())

@@ -6,11 +6,25 @@ OpenCode在本机组织项目文件、用户需求、会话历史和工具结果
 
 OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务端原生HTTP／SSE协议与旧模型配置保留兼容；API及OpenCode接入见接口文档，多模型准备见运维文档。
 
+## 阶段总结（2026-11-04）
+
+本阶段冻结知识库、C#脚本工具和服务端三块源码，版本基线如下：
+
+| 仓库 | 阶段标签 | 本阶段结果 |
+|---|---|---|
+| [IMVision.ScriptKnowledge](https://github.com/mahy616/IMVision.ScriptKnowledge)（私有） | `knowledge-v4.0.5` | v4协议／知识包1.0.5，保留141种工具，按任务装配与完整回查；用户反馈最新测试效果可用，作为本阶段基线 |
+| [Tool.ScriptCsharp](https://github.com/mahy616/Tool.ScriptCsharp)（私有） | `v1.1.0` | DeepSeek／AiServer双后端、v3/v4切换、独立对话与正文流式显示；检查新增代码并移除两个无运行调用的包装方法，私有默认密钥与源码分离 |
+| [AiServer](https://github.com/mahy616/AiServer) | `v0.12.0` | Strata双模型按任务切换，保留单生成位、账号／API key和现有Ollama兼容 |
+
+本机回归、知识包重建与模拟工具链检查用于确认工程基线；真实模型效果仍按具体任务评估。主程序 `D:\Program Files\IMVision1029` 及其 `ScriptAI` 是安装目录，本次只冻结和推送源码，未覆盖安装文件。各仓库保存各自验证记录，服务端详情见[项目进度](docs/项目进度.md)，操作步骤见[正式工程运维](docs/正式工程运维.md)。
+
 ## 使用入口
 
 - 服务管理：双击根目录 `ServerManager.cmd`，选择本机Python和私有配置，加载后管理服务、账号、配置与备份；“运行监控”查看活跃账号、任务性能与硬件资源。
-- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.11.1支持Strata双模型通过`--storage-root`指定SSD目录，保留独立准备、运行、双模型测试及此前安装修复。
-- Strata双模型：停服运行`Install-Strata.cmd`准备Qwen Flash-Next IQ3_XXS／MTP，运行`Install-Strata-DeepSeek.cmd`准备DeepSeek V4.1 Flash 1017 IQ2_XXS／Engram／DSpark。在管理器选择“Strata Qwen”或“Strata DeepSeek”启动；双模型依次验收使用`Test-StrataModels.cmd`。步骤与回退见[运维](docs/正式工程运维.md#0110-strata双模型)，验证边界见[项目进度](docs/项目进度.md)。
+- 服务更新包：双击 `BuildUpdate.cmd`，生成仅含程序的完整小包；0.12.0增加Strata双模型按需切换，保留此前启动、安装和SSD目录修复。
+- Strata双模型：两款分别准备后，一次性启用“Strata 双模型”，客户端可同时选择Qwen和DeepSeek，服务端按任务自动切换加载、保持单生成位。已有单模型配置继续兼容；步骤与回退见[运维](docs/正式工程运维.md#0120-strata按需切换)，验证边界见[项目进度](docs/项目进度.md)。
+- DeepSeek升到128K：已有部署停服后运行`Set-Strata-DeepSeek-128K.cmd`，离线复用本机资源，预检通过后备份发布128K窗口／16K输出；步骤与回退见[运维](docs/正式工程运维.md#deepseek更新为128k)。
+- Strata已有模型换SSD：按[搬迁目录](docs/正式工程运维.md#已下载模型换盘)手动搬文件，再运行`Redirect-StrataModels.cmd`，默认指向`E:\AIModels\AiServer-Strata`；先检查两款大文件，再逐款重建pack、验证并更新路径。
 - 5080增加三款模型：停服后双击`Install-ExtraModels.cmd`，逐款下载校验GPT-OSS-20B MXFP4、Gemma 4-12B Q4_K_M、Gemma 4-26B-A4B Q3_K_M，全GPU预检通过后追加注册；也提供三个独立入口。OpenCode选择与测试见[运维](docs/正式工程运维.md#0912-增加gpt-oss与gemma-4)。
 - 5080准备模型：双击`Install-Qwen35.cmd`准备9B；双击`Install-Qwen38.cmd`下载固定版本并全GPU预检；步骤见[运维](docs/正式工程运维.md#5080增加qwen38-27b)。双模型统一16K输出与已有部署迁移见[运维](docs/正式工程运维.md#0911-仅使用9b与27b)。
 - 27B升到80K：停服并更新程序后，双击 `Set-Qwen38-80K.cmd`，只备份修改实际注册的27B窗口；9B及其他调优保留。步骤与回退见[运维](docs/正式工程运维.md#27b更新为80k)。
@@ -33,7 +47,9 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 |---|---|
 | 启动、账号、诊断、备份、5080更新 | [正式工程运维](docs/正式工程运维.md) |
 | 已实现内容、验证结果、待验证事项 | [项目进度](docs/项目进度.md) |
+| 三块职责／三条主线的现状、问题与下一步优先级 | [项目进度全局总览](docs/项目进度.md#全局现状与优先级) |
 | 初版开发、联调与部署中的问题和经验 | [初版开发与部署复盘](docs/初版开发与部署复盘.md) |
+| 全局认识：三块职责、完整任务链路与三条质量优化主线 | [工程导读1.1—1.3](docs/代码与软件工程导读.md#11-从项目目标看三块职责) |
 | 理解软件架构、代码设计、关键调用链与维护方法 | [代码与软件工程导读](docs/代码与软件工程导读.md) |
 | 业务背景资料、知识库与按需加载的讨论结论 | [工程导读7.5](docs/代码与软件工程导读.md#75-业务资料与知识库接入方向)；初测状态见[项目进度](docs/项目进度.md#背景资料压缩候选筛选) |
 | API、认证机制及OpenCode接入 | [接口文档](contracts/api/v1/README.md) |
@@ -58,4 +74,4 @@ OpenCode使用AiServer签发的独立API key，本机密钥加密保存。服务
 | `scripts/inference/` | 锁定引擎与模型的首次准备工具，按需使用 |
 | `.local/` | 忽略的本机OpenCode、模型、凭据、运行数据与生成产物，不是源码入口 |
 
-本工程保持单服务进程、单生成位；Ollama默认9B／27B，可追加GPT-OSS与两款Gemma；Strata可在停服后选择Flash-Next IQ3_XXS或DeepSeek V4.1 Flash IQ2_XXS，允许CPU、内存与SSD协同。均开放文字与工具调用。上下文、输出和思考控制从models接口读取。保守容量估算与实际token计数分别记录，超限明确拒绝。
+本工程保持单服务进程、单生成位；Ollama默认9B／27B，可追加GPT-OSS与两款Gemma；Strata可同时注册Flash-Next IQ3_XXS与DeepSeek V4.1 Flash IQ2_XXS，按任务切换且只加载一款，允许CPU、内存与SSD协同。均开放文字与工具调用。上下文、输出和思考控制从models接口读取。保守容量估算与实际token计数分别记录，超限明确拒绝。

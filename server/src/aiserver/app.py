@@ -37,10 +37,10 @@ def create_app(settings=None, *, profile=None, budget=None, provider=None):
     store = Store(settings)
     profiles = None
     if settings.provider == "Strata" and profile is None and budget is None and provider is None:
-        from aiserver.inference.strata import load_strata_profile, StrataBudget, StrataProvider
-        cfg, identity, profile = load_strata_profile(settings)
-        budget = StrataBudget(cfg)
-        provider = StrataProvider(settings, cfg, identity)
+        from aiserver.inference.strata_registry import StrataBackends
+        provider = budget = StrataBackends(settings)
+        profiles = provider.profiles
+        profile = profiles[0]
     elif settings.provider == "Ollama" and profile is None and budget is None and provider is None:
         if settings.additional_inference_configs:
             from aiserver.inference.registry import ModelBackends

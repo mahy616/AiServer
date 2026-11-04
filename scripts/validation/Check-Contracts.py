@@ -109,6 +109,9 @@ def main():
     assert strata_client["provider"]["aiserver"]["options"]["apiKey"] == "{env:AISERVER_API_KEY}"
     deepseek = json.loads((ROOT / "config/inference.strata.deepseek.example.json").read_bytes())
     deepseek_client = json.loads((samples / "opencode.strata.deepseek.example.json").read_bytes())
+    combined = json.loads((samples / "opencode.strata.multimodel.example.json").read_bytes())
+    assert combined["provider"]["aiserver"]["models"] == {
+        **strata_client["provider"]["aiserver"]["models"], **deepseek_client["provider"]["aiserver"]["models"]}
     entry = deepseek_client["provider"]["aiserver"]["models"][deepseek["Model"]]
     assert entry["limit"] == {"context": deepseek["NumCtx"], "input": deepseek["NumCtx"]-deepseek["NumPredict"]-deepseek["ReservedTokens"], "output": deepseek["NumPredict"]}
     assert entry["variants"] == {"normal": {"think": False}, "thinking": {"think": True}}

@@ -1,6 +1,6 @@
 {
   "Provider": "Strata",
-  "ProfileId": "deepseek41-iq2-32k-full-v1",
+  "ProfileId": "deepseek41-iq2-128k-full-v1",
   "EngineVersion": "0.1.55",
   "RuntimeVersion": "0.2.9",
   "ExecutablePath": "C:/ProgramData/anaconda3/envs/trt_test_1013/python.exe",
@@ -12,7 +12,7 @@
   "Model": "deepseek-v4.1-flash-1017:iq2_xxs",
   "ExpectedQuantization": "IQ2_XXS",
   "ModelLockPath": "config/models/strata.deepseek.local.json",
-  "NumCtx": 32768,
+  "NumCtx": 131072,
   "NumPredict": 16384,
   "ReservedTokens": 512,
   "MaxTextUtf8Bytes": 2097152,

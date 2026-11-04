@@ -80,7 +80,7 @@ class ServerManager:
         self.path_widgets.append(self.load_button)
         backend_choices = ttk.Frame(paths)
         backend_choices.grid(row=4, column=1, sticky="w", pady=(6,0))
-        for backend, label in (("Ollama", "Ollama配置"), ("Strata", "Strata Qwen"), ("DeepSeek", "Strata DeepSeek")):
+        for backend, label in (("Ollama", "Ollama配置"), ("StrataModels", "Strata 双模型"), ("Strata", "Strata Qwen"), ("DeepSeek", "Strata DeepSeek")):
             choice = ttk.Button(backend_choices, text=label, command=lambda name=backend: self.choose_backend(name))
             choice.pack(side="left", padx=(0,8))
             self.path_widgets.append(choice)
@@ -99,10 +99,11 @@ class ServerManager:
             self.window.after(180,self.load_config)
 
     def choose_backend(self, backend):
-        filename = {"Strata": "server.strata.local.json", "DeepSeek": "server.strata.deepseek.local.json", "Ollama": "server.local.json"}[backend]
+        filename = {"StrataModels": "server.strata.multimodel.local.json", "Strata": "server.strata.local.json", "DeepSeek": "server.strata.deepseek.local.json", "Ollama": "server.local.json"}[backend]
         path = ROOT / "config" / filename
         if not path.is_file():
-            self.feedback.set("请先停服运行Install-Strata-DeepSeek.cmd。" if backend == "DeepSeek" else
+            self.feedback.set("请先准备两款模型，再停服运行Enable-StrataModels.cmd一次。" if backend == "StrataModels" else
+                              "请先停服运行Install-Strata-DeepSeek.cmd。" if backend == "DeepSeek" else
                               "请先停服运行Install-Strata.cmd准备Qwen。" if backend == "Strata" else "请先选择原Ollama私有服务配置。")
             return
         try:
@@ -110,7 +111,7 @@ class ServerManager:
         except (OSError, ValueError):
             self.feedback.set("配置无法读取，请检查JSON文件。")
             return
-        if value.get("provider") != ("Strata" if backend == "DeepSeek" else backend):
+        if value.get("provider") != ("Strata" if backend in ("DeepSeek", "StrataModels") else backend):
             self.feedback.set("所选默认文件不是" + backend + "配置，请手工选择正确的服务JSON。")
             return
         self.config.set(str(path))

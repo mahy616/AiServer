@@ -130,6 +130,10 @@ def configure(record, result):
     cfg = json.loads((ROOT / "contracts/examples/opencode.example.json").read_text(encoding="utf-8"))
     provider = cfg["provider"]["aiserver"]
     provider["options"].update(baseURL=record["server"] + "/v1", apiKey="{env:AISERVER_API_KEY}")
+    if len(models) > 1:
+        # Leave room for queued jobs and cold model switches; the server still
+        # enforces its own queue, load and execution deadlines.
+        provider["options"]["timeout"] = 18000000
     previous = {}
     if CONFIG.is_file():
         try:

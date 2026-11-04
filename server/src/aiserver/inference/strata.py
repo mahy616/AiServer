@@ -6,6 +6,7 @@ import json
 import math
 import os
 from pathlib import Path
+import subprocess
 import time
 from urllib.parse import urlsplit
 
@@ -84,19 +85,30 @@ def validate_config(cfg):
 
 def verify_local_files(cfg, identity):
     """Full content hashes are checked by preparation; large files use recorded size/mtime at startup."""
+    def fail(check, **details):
+        error = ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        error.identity_details = {"local_check": check, **details}
+        raise error
     if (identity.get("provider") != "Strata" or identity.get("model") != cfg["Model"] or
             identity.get("engine_version") != cfg["EngineVersion"] or identity.get("release") != cfg["RuntimeVersion"]):
-        raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        fail("profile_metadata")
     files = identity.get("files", [])
     if not files:
-        raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        fail("empty_file_list")
     for row in files:
         file = path_of(row["path"])
-        stat = file.stat()
-        if stat.st_size != row["size"] or ("mtime_ns" in row and stat.st_mtime_ns != row["mtime_ns"]):
-            raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
-        if row.get("startup_hash", True) and digest(file) != row["sha256"]:
-            raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        try:
+            stat = file.stat()
+        except OSError as error:
+            fail("missing_or_unreadable_file", path=str(file), reason=type(error).__name__)
+        if stat.st_size != row["size"]:
+            fail("file_size", path=str(file), expected=row["size"], actual=stat.st_size)
+        if "mtime_ns" in row and stat.st_mtime_ns != row["mtime_ns"]:
+            fail("file_mtime", path=str(file), expected=row["mtime_ns"], actual=stat.st_mtime_ns)
+        if row.get("startup_hash", True):
+            actual = digest(file)
+            if actual != row["sha256"]:
+                fail("file_sha256", path=str(file), expected=row["sha256"], actual=actual)
     run = strict_json(path_of(cfg["RunConfigPath"]).read_bytes())
     args = run.get("args", [])
     model_path = path_of(identity_model_path(identity))
@@ -107,13 +119,13 @@ def verify_local_files(cfg, identity):
             path_of(run["exe"]) != path_of(cfg["EnginePath"]) or
             path_of(run["cwd"]) != path_of(cfg["RuntimePath"]) or
             path_of(args[args.index("--pack" if is_deepseek(cfg) else "--native") + 1]) != model_path):
-        raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        fail("engine_or_model_paths", expected_model_path=str(model_path))
     if (run.get("fit_max_tokens") is not False or run.get("parallel", 1) != 1 or run.get("max_queue") != 1 or
             run.get("model_name") != cfg["Model"] or
             run.get("host") != "127.0.0.1" or run.get("lazy_load", False) or
             str(cfg["NumCtx"]) != args[args.index("--max-context") + 1] or
             "--batch" in args or "--batch-groups" in args):
-        raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        fail("run_context_or_scheduler")
     if is_deepseek(cfg):
         if (identity.get("family") != "deepseek41" or run.get("arch") != "deepseek41" or
                 run.get("env", {}).get("STRATA_DS4_SLOT_KEEP") != "0" or
@@ -121,11 +133,12 @@ def verify_local_files(cfg, identity):
                 args[args.index("--experts") + 1] != str(cfg["ActiveExperts"]) or
                 args[args.index("--vision") + 1] != "off" or args[args.index("--dspark") + 1] != cfg["DraftMode"] or
                 "--native" in args or "--mtp" in args):
-            raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+            fail("deepseek_runtime_arguments")
     elif run.get("mtp") is not True or "--mtp" not in args or run.get("arch", "qwen4exp") != "qwen4exp":
-        raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        fail("qwen_runtime_arguments")
     if identity.get("run_config_sha256") != digest(path_of(cfg["RunConfigPath"])):
-        raise ValueError("MODEL_IDENTITY_CHECK_FAILED")
+        fail("run_config_sha256", path=str(path_of(cfg["RunConfigPath"])), expected=identity.get("run_config_sha256"),
+             actual=digest(path_of(cfg["RunConfigPath"])))
 
 
 def load_strata_profile(settings):
@@ -327,6 +340,20 @@ class StrataAdapter:
 
 
 class ManagedStrataEngine(ManagedEngine):
+    async def unload(self):
+        """Stop the whole owned tree before changing config; keep the process lock."""
+        async def finish():
+            if self.lock:
+                await asyncio.to_thread(self._stop_recorded)
+            if self.reader:
+                await asyncio.to_thread(self.reader.join, 2)
+        task = asyncio.create_task(finish())
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            raise
+
     def launch_spec(self):
         cfg = self.cfg
         environment = os.environ.copy()
@@ -363,6 +390,58 @@ class ManagedStrataEngine(ManagedEngine):
         raise RuntimeError("Managed engine startup timed out")
 
 
+DSML_TEMPLATE_PROBE = r'''
+import hashlib, json, sys
+from pathlib import Path
+from serve.frontend import ChatTemplate
+from serve.dsml import DSML, DsmlOutputParser
+template = ChatTemplate(Path(sys.argv[1]))
+name, result = "aiserver_dsml_probe", "AISERVER_DSML_RESULT_42"
+function = {"name": name, "description": "Local template probe", "parameters": {
+    "type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}
+user = {"role": "user", "content": "Use the available tool."}
+tools = [function]
+prompt = template.render([user], tools=tools, enable_thinking=False)
+messages = [user, {"role": "assistant", "content": "", "tool_calls": [{
+    "id": "probe-call", "function": {"name": name, "arguments": {"path": "sample.txt"}}}]},
+    {"role": "tool", "tool_call_id": "probe-call", "content": result},
+    {"role": "user", "content": "Repeat the result."}]
+history = template.render(messages, tools=tools, enable_thinking=False)
+start, end = "<" + DSML + " calls>", "</" + DSML + " calls>"
+offset = history.rfind(start)
+stop = history.find(end, offset)
+block = history[offset:stop + len(end)] if offset >= 0 and stop >= 0 else ""
+parser = DsmlOutputParser(thinking=False, tools=tools)
+events = []
+for offset in range(0, len(block), 3):
+    events.extend(parser.feed(block[offset:offset + 3]))
+events.extend(parser.finish("stop"))
+calls = [{"name": event.call.name, "arguments": event.call.arguments}
+         for event in events if event.kind == "tool_call"]
+passed = (name in prompt and "Local template probe" in prompt and start in prompt
+          and result in history and calls == [{"name": name, "arguments": {"path": "sample.txt"}}])
+print(json.dumps({"passed": passed, "template_sha256": hashlib.sha256(template.source.encode()).hexdigest(),
+                  "generic_supports_tools": template.caps.get("supports_tools")}))
+'''
+
+
+def probe_dsml_template(cfg, model_path):
+    """Check the pinned frontend's DSML render/parse path without a model or network."""
+    environment = os.environ.copy()
+    environment.update(PYTHONUTF8="1", PYTHONNOUSERSITE="1", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
+        PYTHONPATH=os.pathsep.join([str(path_of(cfg["DependencyPath"])), str(path_of(cfg["RuntimePath"]))]))
+    try:
+        result = subprocess.run([str(path_of(cfg["ExecutablePath"])), "-s", "-c", DSML_TEMPLATE_PROBE,
+            str(path_of(model_path) / "tokenizer/chat_template.jinja")], env=environment,
+            cwd=path_of(cfg["RuntimePath"]), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            encoding="utf-8", timeout=30, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        if result.returncode:
+            return {"passed": False, "reason": "DSML probe failed", "stderr": result.stderr[-1000:]}
+        return strict_json(result.stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        return {"passed": False, "reason": type(error).__name__}
+
+
 class StrataProvider:
     supports_tools = False
     supports_thinking = False
@@ -372,28 +451,73 @@ class StrataProvider:
         self.adapter = StrataAdapter(cfg)
         self.engine = ManagedStrataEngine(cfg, settings.data_directory / "logs")
         self.recovery_timeout_seconds = cfg["StartupTimeoutSeconds"] + 30
+        self.dsml_template_probe = None
+        self.identity_observation = None
 
     async def verify_identity(self):
+        observed = {}
+        self.identity_observation = observed
         try:
             props_response = await self.adapter.client.get("/props", timeout=10)
+            observed["props_http_status"] = props_response.status_code
             slots_response = await self.adapter.client.get("/slots", timeout=10)
+            observed["slots_http_status"] = slots_response.status_code
             props_response.raise_for_status()
             slots_response.raise_for_status()
             props, slots = props_response.json(), slots_response.json()
-            if (props.get("model_alias") != self.cfg["Model"] or props.get("total_slots") != 1 or
-                    props.get("build_info") != "Strata " + self.cfg["EngineVersion"] or props.get("is_sleeping") is not False or
-                    props.get("default_generation_settings", {}).get("n_ctx") != self.cfg["NumCtx"] or
-                    path_of(props["model_path"]) != path_of(identity_model_path(self.identity)) or
-                    hashlib.sha256(props["chat_template"].encode()).hexdigest() != self.identity["chat_template_sha256"] or
-                    not isinstance(slots, list) or len(slots) != 1 or slots[0].get("n_ctx") != self.cfg["NumCtx"] or
-                    slots[0].get("is_processing") is not False):
-                raise ValueError("Identity differs")
-            self.supports_tools = props.get("chat_template_caps", {}).get("supports_tools") is True
-            if not self.supports_tools:
-                raise ValueError("Tools unavailable")
+            # Keep only identity fields, never the template body or arbitrary HTTP data.
+            observed["props"] = {key: props.get(key) for key in
+                ("model_alias", "total_slots", "build_info", "is_sleeping", "model_path")}
+            observed["props"]["n_ctx"] = props.get("default_generation_settings", {}).get("n_ctx")
+            observed["props"]["supports_tools"] = props.get("chat_template_caps", {}).get("supports_tools")
+            observed["props"]["chat_template_sha256"] = hashlib.sha256(props["chat_template"].encode()).hexdigest()
+            observed["slots"] = [{key: slot.get(key) for key in ("id", "n_ctx", "is_processing")}
+                                 for slot in slots] if isinstance(slots, list) else {"response_type": type(slots).__name__}
+            checks = [
+                ("model_alias", self.cfg["Model"], props.get("model_alias")),
+                ("total_slots", 1, props.get("total_slots")),
+                # The pinned DeepSeek executable's INFO reports ds4-0.1;
+                # its release/component manifest still identifies it as 0.1.55.
+                ("build_info", ["Strata " + self.cfg["EngineVersion"]] +
+                    (["Strata ds4-0.1"] if is_deepseek(self.cfg) and self.cfg["EngineVersion"] == "0.1.55" else []), props.get("build_info")),
+                ("is_sleeping", False, props.get("is_sleeping")),
+                ("n_ctx", self.cfg["NumCtx"], props.get("default_generation_settings", {}).get("n_ctx")),
+                ("model_path", path_of(identity_model_path(self.identity)), path_of(props["model_path"])),
+                ("chat_template_sha256", self.identity["chat_template_sha256"], hashlib.sha256(props["chat_template"].encode()).hexdigest()),
+                ("slot_count", 1, len(slots) if isinstance(slots, list) else None),
+            ]
+            if isinstance(slots, list) and len(slots) == 1:
+                checks.extend([("slot.n_ctx", self.cfg["NumCtx"], slots[0].get("n_ctx")),
+                               ("slot.is_processing", False, slots[0].get("is_processing"))])
+            mismatches = [{"field": key, "expected": str(expected) if isinstance(expected, Path) else expected,
+                           "actual": str(actual) if isinstance(actual, Path) else actual} for key, expected, actual in checks
+                          if (actual not in expected if key == "build_info" else
+                              actual is not expected if type(expected) is bool else actual != expected)]
+            tools_available = props.get("chat_template_caps", {}).get("supports_tools") is True
+            # v0.2.9's generic capability probe looks for Qwen XML, not DSML.
+            # Accept that false hint only after all identity checks and a local
+            # render + tool-call parse + associated tool-result check succeed.
+            if not tools_available and not mismatches and is_deepseek(self.cfg) and props.get("chat_template_caps", {}).get("supports_tools") is False:
+                if self.dsml_template_probe is None:
+                    self.dsml_template_probe = await asyncio.to_thread(probe_dsml_template, self.cfg, identity_model_path(self.identity))
+                observed["dsml_template_probe"] = self.dsml_template_probe
+                tools_available = (self.dsml_template_probe.get("passed") is True and
+                    self.dsml_template_probe.get("template_sha256") == self.identity["chat_template_sha256"])
+            if not tools_available:
+                mismatches.append({"field": "supports_tools", "expected": True,
+                                   "actual": props.get("chat_template_caps", {}).get("supports_tools")})
+            if mismatches:
+                error = RuntimeError("MODEL_IDENTITY_CHECK_FAILED")
+                error.identity_details = {"mismatches": mismatches, "observed": observed}
+                if self.dsml_template_probe is not None:
+                    error.identity_details["dsml_template_probe"] = self.dsml_template_probe
+                raise error
+            self.supports_tools = tools_available
             self.supports_thinking = True
         except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as error:
-            raise RuntimeError("MODEL_IDENTITY_CHECK_FAILED") from error
+            failure = RuntimeError("MODEL_IDENTITY_CHECK_FAILED")
+            failure.identity_details = {"response_error": type(error).__name__, "observed": observed}
+            raise failure from error
 
     async def start(self):
         await self.engine.start()

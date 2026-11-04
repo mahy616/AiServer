@@ -33,7 +33,7 @@ def resources():
     return result
 
 
-async def tool_roundtrip(provider, budget, profile):
+async def tool_roundtrip(provider, budget, profile, *, report_step=None):
     messages = [{"role": "user", "content": [{"type": "text", "text":
         "Use read_sample to read sample.txt, then repeat its returned marker exactly."}]}]
     tools = [{"type": "function", "function": {"name": "read_sample", "description": "Read the requested sample file",
@@ -41,12 +41,18 @@ async def tool_roundtrip(provider, budget, profile):
     async def ignore(text, channel="content"):
         pass
     async def generate(choice):
+        phase = "native_tool_call" if choice == "required" else "associated_tool_result"
+        if report_step is not None:
+            report_step(phase)
         request = {"protocol": "openai-chat-v1", "messages": messages, "tools": tools, "think": False,
             "tool_choice": choice, "parallel_tool_calls": False, "options": {"num_predict": min(512, budget.cfg["NumPredict"])}}
         check = await budget.prepare(TaskInput(json.dumps(request), ()), profile)
         if check.code:
             raise ValueError(check.code)
-        return await provider.generate(check.prepared, asyncio.Event(), ignore)
+        output = await provider.generate(check.prepared, asyncio.Event(), ignore)
+        if report_step is not None:
+            report_step(phase, output)
+        return output
     first = await generate("required")
     if not first.is_complete or len(first.tool_calls) != 1:
         raise ValueError("Model did not return one complete native tool call")
